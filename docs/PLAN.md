@@ -4,17 +4,17 @@
 
 ## Progress
 
-| Phase                                          | Status      |
-| ---------------------------------------------- | ----------- |
-| Phase 0 — Foundation                           | In progress |
-| Phase 1 — Crypto package                       | Not started |
-| Phase 2 — API core: auth and users             | Not started |
-| Phase 3 — API: projects, environments, secrets | Not started |
-| Phase 4 — CLI core                             | Not started |
-| Phase 5 — Teams and access                     | Not started |
-| Phase 6 — Web dashboard                        | Not started |
-| Phase 7 — CI tokens and polish                 | Not started |
-| Phase 8 — Hardening and release                | Not started |
+| Phase                                          | Status                            |
+| ---------------------------------------------- | --------------------------------- |
+| Phase 0 — Foundation                           | Done (CI and macOS spike pending) |
+| Phase 1 — Crypto package                       | Not started                       |
+| Phase 2 — API core: auth and users             | Not started                       |
+| Phase 3 — API: projects, environments, secrets | Not started                       |
+| Phase 4 — CLI core                             | Not started                       |
+| Phase 5 — Teams and access                     | Not started                       |
+| Phase 6 — Web dashboard                        | Not started                       |
+| Phase 7 — CI tokens and polish                 | Not started                       |
+| Phase 8 — Hardening and release                | Not started                       |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
 
@@ -342,17 +342,40 @@ Eight phases; after Phase 4 a single developer can already sync secrets end to e
 
 Goal: an empty but fully wired monorepo where `bun run verify` passes.
 
-- [ ] Bun workspaces with apps/api, apps/cli, apps/web, packages/crypto, packages/shared, packages/tsconfig
-- [ ] Pin Bun 1.4.4 or newer (packageManager field + setup-bun version in CI)
-- [ ] Strict base tsconfig; lint config with type-aware rules such as `no-floating-promises` and `no-explicit-any` set to error (oxlint, see ADR 0003)
-- [ ] Root scripts: dev, verify (format check, lint, `bun check`, `bun test`), test, build, db:generate, db:migrate
-- [ ] docker-compose.yml with Postgres 16
-- [ ] Pre-commit hook: `bun fmt` + lint on staged files
-- [ ] GitHub Actions workflow running `bun run verify`
-- [ ] AGENTS.md, docs/PLAN.md, docs/adr/0001-stack.md
-- [ ] Spike: confirm libsodium-wrappers-sumo and the chosen keychain library both work inside a `bun build --compile` binary on macOS and Linux. Write the result as ADR 0002
+- [x] Bun workspaces with apps/api, apps/cli, apps/web, packages/crypto, packages/shared, packages/tsconfig
+- [x] Pin Bun 1.4.4 or newer (packageManager field + setup-bun version in CI)
+- [x] Strict base tsconfig; lint config with type-aware rules such as `no-floating-promises` and `no-explicit-any` set to error (oxlint, see ADR 0003)
+- [x] Root scripts: dev, verify (format check, lint, `bun check`, `bun test`), test, build, db:generate, db:migrate
+- [x] docker-compose.yml with Postgres 16
+- [x] Pre-commit hook: `bun fmt` + lint on staged files
+- [x] GitHub Actions workflow running `bun run verify`
+- [x] AGENTS.md, docs/PLAN.md, docs/adr/0001-stack.md
+- [x] Spike: confirm libsodium-wrappers-sumo and the chosen keychain library both work inside a `bun build --compile` binary on macOS and Linux. Write the result as ADR 0002 (Linux arm64 confirmed; macOS still to be confirmed before Phase 4 ends)
 
 Done when: fresh clone → `bun install && docker compose up -d && bun run verify` passes with no errors, CI is green, and there is no ESLint, Prettier, Biome or typescript CLI dependency.
+
+#### Phase 0 summary (2026-11-22)
+
+Built:
+
+- Bun 1.4.5 workspaces: `apps/api` (Elysia with `GET /health` and `type App`), `apps/cli` (placeholder binary), `apps/web` (placeholder static Next.js page), `packages/crypto`, `packages/shared`, `packages/tsconfig`.
+- `bun run verify` = `bun fmt --check`, oxlint (type-aware), `bun check -b`, `bun test`. `bun run build` compiles the CLI and API binaries and exports the web site.
+- Docker Compose with Postgres 16, drizzle-kit wired to `db:generate` and `db:migrate`.
+- Pre-commit hook in `.githooks/`, installed by `bun install`.
+- GitHub Actions: verify and migrations on every PR, binaries on `main`.
+- AGENTS.md, docs/architecture.md, ADRs 0001 to 0004.
+
+Changed from the plan (each has an ADR):
+
+- `bun lint` is not in a stable Bun release yet, so linting uses oxlint for now (ADR 0003).
+- `next build` needs the `typescript` package, so it is a dev dependency of `apps/web` only (ADR 0004).
+- Keychain: `@napi-rs/keyring`, because `Bun.secrets` does not work on Linux machines without libsecret (ADR 0002).
+- `docker-compose.yml` takes `ENVY_POSTGRES_PORT`, for machines that already run Postgres on 5432. Mailpit is left for the phase that sends email.
+
+Open questions:
+
+- macOS check of the spike (ADR 0002) needs a Mac.
+- CI has not run yet; it runs on the first push.
 
 ### Phase 1 — Crypto package
 
