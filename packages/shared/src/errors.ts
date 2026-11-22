@@ -22,6 +22,18 @@ export const ERROR_CODES = [
   "OAUTH_STATE_MISMATCH",
   // Users
   "KEYS_ALREADY_SET",
+  // Projects, environments and secrets
+  "FORBIDDEN",
+  "PROJECT_NOT_FOUND",
+  "PROJECT_SLUG_TAKEN",
+  "ENVIRONMENT_NOT_FOUND",
+  "ENVIRONMENT_NAME_TAKEN",
+  "RECIPIENTS_MISMATCH",
+  "KEY_NOT_FOUND",
+  "VERSION_NOT_FOUND",
+  "VERSION_CONFLICT",
+  "KEY_VERSION_OUTDATED",
+  "SECRETS_TOO_LARGE",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -31,6 +43,8 @@ export type ErrorResponseBody = {
   error: {
     code: ErrorCode;
     message: string;
+    /** Extra facts for some codes, for example `latestVersion` with VERSION_CONFLICT. */
+    details?: Record<string, string | number>;
   };
 };
 
