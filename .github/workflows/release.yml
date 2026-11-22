@@ -71,6 +71,15 @@ jobs:
           security set-keychain-settings envy-ci.keychain
           echo "Default keychain: $(security default-keychain -d user)"
 
+      # Apple Silicon binaries are always signed; Intel ones are not, and the
+      # keychain refuses unsigned callers. An ad-hoc signature fixes both.
+      - name: Sign (macOS, ad hoc)
+        if: runner.os == 'macOS'
+        run: |
+          codesign -dv "dist/${{ matrix.file }}" 2>&1 || echo "(not signed yet)"
+          codesign --force --sign - "dist/${{ matrix.file }}"
+          codesign -dv "dist/${{ matrix.file }}" 2>&1
+
       - name: Smoke test (version and OS keychain)
         env:
           ENVY_DEBUG: "1"
