@@ -1,5 +1,5 @@
 import { createApp } from "./app.ts";
-import { ConfigError, loadConfig } from "./config.ts";
+import { ConfigError, configWarnings, loadConfig } from "./config.ts";
 import { createDatabase } from "./db/client.ts";
 import { systemClock } from "./lib/clock.ts";
 import { createLogger } from "./lib/logger.ts";
@@ -22,6 +22,9 @@ function readConfig() {
 }
 
 const config = readConfig();
+for (const warning of configWarnings(config)) {
+  logger.warn(warning);
+}
 const { database, close } = createDatabase(config.databaseUrl);
 const github = createGitHubClient({
   clientId: config.githubClientId,

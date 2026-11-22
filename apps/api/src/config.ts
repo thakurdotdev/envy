@@ -70,6 +70,23 @@ export function loadConfig(environment: Environment): Config {
   return config;
 }
 
+/**
+ * Settings that work but are probably a mistake. The server still starts, so
+ * a deploy is never stopped by them; they are logged as warnings at boot.
+ */
+export function configWarnings(config: Config): string[] {
+  const warnings: string[] = [];
+  if (config.environment === "production" && config.trustedProxies === 0) {
+    // Production needs https, so a proxy almost always sits in front. With
+    // TRUST_PROXY=0 every request seems to come from that proxy: the audit log
+    // shows its address (often 127.0.0.1) and all users share one rate limit.
+    warnings.push(
+      "TRUST_PROXY is 0, so client addresses are the proxy's own. Set TRUST_PROXY to the number of proxies in front of the API (see docs/deploy.md).",
+    );
+  }
+  return warnings;
+}
+
 function createReader(environment: Environment, problems: string[]) {
   function readRaw(name: string): string | undefined {
     const value = environment[name]?.trim();
