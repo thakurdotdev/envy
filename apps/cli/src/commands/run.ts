@@ -1,6 +1,9 @@
-import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
+import {
+  loadEnvironmentVariables,
+  openProjectContext,
+  type EnvironmentOptions,
+} from "../core/context.ts";
 import { CliError } from "../core/errors.ts";
-import { mergeLayers, pullEnvironment } from "../core/secrets.ts";
 import { withSpinner } from "../ui/prompts.ts";
 import { warnAboutMissingKeys } from "../core/example-check.ts";
 
@@ -16,18 +19,11 @@ export async function run(command: string[], options: EnvironmentOptions): Promi
     throw new CliError("Say which command to run.", { hint: "For example: envy run -- npm start" });
   }
   const context = await openProjectContext(options);
-  const { found, session, environment, sharedEnvironment } = context;
-  const keys = await context.unlock();
-  const projectId = found.link.projectId;
-
-  const variables = await withSpinner(`Loading ${environment.name}`, async () => {
-    const pulled = await pullEnvironment(session, keys, projectId, environment);
-    const shared =
-      sharedEnvironment === undefined
-        ? { secrets: {} }
-        : await pullEnvironment(session, keys, projectId, sharedEnvironment);
-    return mergeLayers(shared.secrets, pulled.secrets);
-  });
+  const { found, environment } = context;
+  await context.unlock();
+  const variables = await withSpinner(`Loading ${environment.name}`, () =>
+    loadEnvironmentVariables(context),
+  );
 
   await warnAboutMissingKeys(found.folder, environment.name, variables);
 

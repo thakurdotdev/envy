@@ -115,6 +115,12 @@ describe("service tokens and polish, end to end", () => {
         expect.objectContaining({ check: "sign-in", status: "ok" }),
         expect.objectContaining({ check: "project link", status: "ok" }),
         expect.objectContaining({ check: "access", status: "ok" }),
+        // Checked against what envy stores for development, not the local file.
+        expect.objectContaining({
+          check: "missing keys",
+          status: "warning",
+          message: expect.stringContaining("development does not set STRIPE_KEY"),
+        }),
       ]),
     );
 

@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (2026-11-22)
 
 - Install script: shows the platform and version, says which version it updates from, shows a download progress bar, skips an install that is already up to date, and prints the exact PATH line for your shell.
 - `envy upgrade` (also `envy update`): shows the current and new version, a progress bar and the release notes link; adds `--check`, `--force` and picking a version; works on Windows.
 - `envy login` copies the sign-in code to your clipboard before opening GitHub.
+- `envy doctor` checks `.env.example` against what envy stores for the environment (what `envy run` injects), not the local `.env`, and warns when the local `.env` is behind envy.
 
 ## 0.1.0 (2026-11-22)
 
