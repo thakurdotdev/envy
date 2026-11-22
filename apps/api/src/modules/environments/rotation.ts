@@ -1,7 +1,7 @@
 import type { EnvironmentRow } from "../../db/schema.ts";
 import { assertBase64UrlBytes, base64UrlByteLength, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
-import type { RequestContext } from "../../lib/request-context.ts";
+import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 
@@ -14,6 +14,8 @@ export type EnvironmentRotation = {
   environmentId: string;
   newKeyVersion: number;
   wrappedKeys: Array<{ userId: string; wrappedKey: string }>;
+  /** The new key wrapped for each active service token of this environment. */
+  tokenWrappedKeys?: Array<{ tokenId: string; wrappedKey: string }> | undefined;
   /** The latest secret version the client re-encrypted (0 for an empty environment). */
   baseVersion: number;
   ciphertext?: string | undefined;
@@ -35,6 +37,7 @@ export async function applyRotation(
   environment: EnvironmentRow,
   rotation: EnvironmentRotation,
   recipientUserIds: Set<string>,
+  now: Date,
 ): Promise<void> {
   if (rotation.newKeyVersion !== environment.currentKeyVersion + 1) {
     throw mismatch(
@@ -53,7 +56,26 @@ export async function applyRotation(
       400,
     );
   }
-  for (const recipient of rotation.wrappedKeys) {
+  // Service tokens keep working after a rotation only if they get the new key too.
+  const activeTokenIds = new Set(
+    (await transaction.tokens.listActiveForEnvironment(environment.id, now)).map(
+      (token) => token.id,
+    ),
+  );
+  const tokenKeys = rotation.tokenWrappedKeys ?? [];
+  const wrappedForTokens = new Set(tokenKeys.map((key) => key.tokenId));
+  const coversEveryToken =
+    wrappedForTokens.size === tokenKeys.length &&
+    wrappedForTokens.size === activeTokenIds.size &&
+    [...wrappedForTokens].every((tokenId) => activeTokenIds.has(tokenId));
+  if (!coversEveryToken) {
+    throw new AppError(
+      "RECIPIENTS_MISMATCH",
+      `Wrap the new ${environment.name} key exactly once for every active service token.`,
+      400,
+    );
+  }
+  for (const recipient of [...rotation.wrappedKeys, ...tokenKeys]) {
     assertBase64UrlBytes(recipient.wrappedKey, BYTE_SIZES.wrappedEnvKey, "wrappedKey");
   }
 
@@ -82,16 +104,25 @@ export async function applyRotation(
   if (!advanced) {
     throw mismatch(`Someone rotated ${environment.name} at the same moment. Try again.`);
   }
-  await transaction.environments.addWrappedKeys(
-    rotation.wrappedKeys.map((recipient) => ({
+  const createdBy = requireUser(context.actor).userId;
+  await transaction.environments.addWrappedKeys([
+    ...rotation.wrappedKeys.map((recipient) => ({
       environmentId: environment.id,
       keyVersion: rotation.newKeyVersion,
       recipientType: "user" as const,
       recipientId: recipient.userId,
       wrappedKey: recipient.wrappedKey,
-      createdBy: context.actor.userId,
+      createdBy,
     })),
-  );
+    ...tokenKeys.map((recipient) => ({
+      environmentId: environment.id,
+      keyVersion: rotation.newKeyVersion,
+      recipientType: "token" as const,
+      recipientId: recipient.tokenId,
+      wrappedKey: recipient.wrappedKey,
+      createdBy,
+    })),
+  ]);
   if (rotation.ciphertext !== undefined && rotation.nonce !== undefined) {
     assertBase64UrlBytes(rotation.nonce, BYTE_SIZES.nonce, "nonce");
     const ciphertextBytes = base64UrlByteLength(rotation.ciphertext) ?? 0;
@@ -104,7 +135,7 @@ export async function applyRotation(
       keyVersion: rotation.newKeyVersion,
       ciphertext: rotation.ciphertext,
       nonce: rotation.nonce,
-      authorId: context.actor.userId,
+      authorId: requireUser(context.actor).userId,
       message: "Key rotation",
     });
   }

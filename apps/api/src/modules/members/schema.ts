@@ -46,6 +46,15 @@ export const RotationSchema = t.Object(
       ),
       { maxItems: 1000 },
     ),
+    tokenWrappedKeys: t.Optional(
+      t.Array(
+        t.Object(
+          { tokenId: t.String({ format: "uuid" }), wrappedKey: base64Url(200) },
+          { additionalProperties: false },
+        ),
+        { maxItems: 1000 },
+      ),
+    ),
     baseVersion: t.Integer({ minimum: 0 }),
     ciphertext: t.Optional(base64Url(200_000)),
     nonce: t.Optional(base64Url(100)),

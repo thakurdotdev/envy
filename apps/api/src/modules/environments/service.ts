@@ -1,9 +1,10 @@
 import { isUniqueViolation } from "../../db/executor.ts";
 import type { EnvironmentRow } from "../../db/schema.ts";
-import type { AccessChecker } from "../../lib/access.ts";
+import { projectNotFound, type AccessChecker } from "../../lib/access.ts";
+import type { Clock } from "../../lib/clock.ts";
 import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
-import type { RequestContext } from "../../lib/request-context.ts";
+import { requireUser, actorId, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 import { applyRotation, type EnvironmentRotation } from "./rotation.ts";
@@ -18,13 +19,25 @@ export function createEnvironmentService(dependencies: {
   repositories: Repositories;
   runInTransaction: RunInTransaction;
   access: AccessChecker;
+  clock: Clock;
 }) {
-  const { repositories, runInTransaction, access } = dependencies;
+  const { repositories, runInTransaction, access, clock } = dependencies;
 
   return {
     async listEnvironments(context: RequestContext, projectId: string) {
-      await access.assertRole(context, projectId, "viewer");
-      const rows = await repositories.environments.listForProject(projectId);
+      const actor = context.actor;
+      // A service token may list its own project, and sees only its environment.
+      const onlyEnvironmentId = actor.type === "token" ? actor.environmentId : undefined;
+      if (actor.type === "token") {
+        if (actor.projectId !== projectId) {
+          throw projectNotFound();
+        }
+      } else {
+        await access.assertRole(context, projectId, "viewer");
+      }
+      const rows = (await repositories.environments.listForProject(projectId)).filter(
+        (row) => onlyEnvironmentId === undefined || row.id === onlyEnvironmentId,
+      );
       return {
         items: rows.map((row) => ({ ...toEnvironmentDto(row), latestVersion: row.latestVersion })),
       };
@@ -60,7 +73,7 @@ export function createEnvironmentService(dependencies: {
               recipientType: "user" as const,
               recipientId: recipient.userId,
               wrappedKey: recipient.wrappedKey,
-              createdBy: context.actor.userId,
+              createdBy: requireUser(context.actor).userId,
             })),
           );
           await recordAuditEvent(transaction.audit, context, {
@@ -102,6 +115,7 @@ export function createEnvironmentService(dependencies: {
           environment,
           { ...rotation, environmentId },
           recipients,
+          clock.now(),
         );
       });
       return { keyVersion: rotation.newKeyVersion };
@@ -118,8 +132,8 @@ export function createEnvironmentService(dependencies: {
       const wrappedKey = await repositories.environments.findWrappedKey({
         environmentId,
         keyVersion: version,
-        recipientType: "user",
-        recipientId: context.actor.userId,
+        recipientType: context.actor.type,
+        recipientId: actorId(context.actor),
       });
       if (wrappedKey === undefined) {
         throw new AppError(

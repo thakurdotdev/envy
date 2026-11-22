@@ -213,6 +213,36 @@ export const secretVersions = pgTable(
   ],
 );
 
+// A read-only key for CI, for one environment. The server keeps only a hash
+// of the token's id part; the private key part never leaves the client.
+export const serviceTokens = pgTable(
+  "service_tokens",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    environmentId: uuid("environment_id")
+      .notNull()
+      .references(() => environments.id),
+    name: text("name").notNull(),
+    tokenIdHash: text("token_id_hash").notNull().unique(),
+    publicKey: text("public_key").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("service_tokens_project_id_index").on(table.projectId),
+    index("service_tokens_environment_id_index").on(table.environmentId),
+    index("service_tokens_created_by_index").on(table.createdBy),
+  ],
+);
+
 export const actorType = pgEnum("actor_type", ["user", "token"]);
 
 // Append-only, and never holds secret values: only who did what, and when.
@@ -245,3 +275,4 @@ export type EnvironmentRow = typeof environments.$inferSelect;
 export type SecretVersionRow = typeof secretVersions.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
 export type InviteRow = typeof invites.$inferSelect;
+export type ServiceTokenRow = typeof serviceTokens.$inferSelect;

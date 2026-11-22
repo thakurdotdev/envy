@@ -43,6 +43,9 @@ export const ERROR_CODES = [
   "MEMBER_NOT_PENDING",
   "OWNER_CANNOT_CHANGE",
   "ROTATION_MISMATCH",
+  // Service tokens
+  "TOKEN_NOT_FOUND",
+  "TOKEN_NOT_ALLOWED",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];

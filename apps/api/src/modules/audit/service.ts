@@ -1,6 +1,6 @@
 import type { AccessChecker } from "../../lib/access.ts";
 import { DEFAULT_PAGE_SIZE, toPage } from "../../lib/pagination.ts";
-import type { RequestContext } from "../../lib/request-context.ts";
+import { actorId, type RequestContext } from "../../lib/request-context.ts";
 import type { AuditRepository } from "./repository.ts";
 
 /** What happened. Metadata must never hold a secret value or key. */
@@ -18,8 +18,10 @@ export type AuditEvent = {
     | "member.joined"
     | "member.granted"
     | "member.role_changed"
-    | "member.removed";
-  targetType: "project" | "environment" | "member";
+    | "member.removed"
+    | "token.created"
+    | "token.revoked";
+  targetType: "project" | "environment" | "member" | "token";
   targetId: string;
   metadata?: Record<string, string | number | boolean | null>;
 };
@@ -33,7 +35,7 @@ export async function recordAuditEvent(
   await audit.insert({
     projectId: event.projectId,
     actorType: context.actor.type,
-    actorId: context.actor.userId,
+    actorId: actorId(context.actor),
     action: event.action,
     targetType: event.targetType,
     targetId: event.targetId,
