@@ -53,9 +53,11 @@ All of this is in `packages/crypto` and tested there.
   `DECRYPTION_FAILED`.
 - **Blobs cannot be moved.** A secrets blob is bound through additional
   authenticated data (AAD) to its project id, environment id, version and key
-  version. A server that swaps blobs between environments, or serves an old
-  version as the latest, causes a decryption failure. Ids may not contain `|`,
-  the separator, so two places never produce the same AAD.
+  version. A server that swaps blobs between environments, or relabels an old
+  version with a newer number, causes a decryption failure. Ids may not
+  contain `|`, the separator, so two places never produce the same AAD.
+  Serving an old version honestly labelled as the latest is not a crypto
+  failure; the CLI catches it with `trust.json` (below).
 - **Old data stays readable.** Every blob starts with a format version byte.
   Fixed version 1 test vectors are checked on every test run.
 - **A server cannot weaken password hashing.** Clients refuse Argon2id
@@ -75,10 +77,13 @@ All of this is in `packages/crypto` and tested there.
 | Database or backup leaked                  | Only ciphertext and wrapped keys     | Zero-knowledge design. Argon2id makes guessing master passwords slow                                               |
 | Server swaps, replays or changes blobs     | Decryption fails                     | Authenticated encryption, AAD binding, version checks                                                              |
 | Server sends weak Argon2id settings        | Client refuses                       | Minimum settings are enforced on the client                                                                        |
+| Server rolls an environment back           | CLI refuses                          | `trust.json` keeps the newest version and key version seen; older ones, or pushing with an older key, are refused  |
 | Server swaps a public key during an invite | The server could give itself access  | **Known v1 limit.** Fingerprints are shown on invite and in `envy members ls`; users must compare them out of band |
+| Server swaps a key it already showed       | CLI refuses                          | `trust.json` pins each member's and token's public key the first time the CLI sees it; a changed key is refused    |
 | Stolen laptop                              | Cached keys can be read              | OS keychain; `envy logout` and session revoke from the web                                                         |
 | Removed member kept copies                 | They know the old values             | New key version for every environment they could read, and a reminder to change the real credentials               |
 | Password, token or invite guessing         | Account abuse                        | Rate limits per IP and per user; long random tokens; tokens stored as hashes                                       |
+| Malicious `.envy.json` in a cloned repo    | Overwrite or upload other files      | `file` must stay inside the project folder; links pointing outside it are refused                                  |
 | Weak master password                       | Leaked data could be cracked offline | Argon2id slows this down but cannot stop it for very weak passwords; the UI should ask for a strong one            |
 | Lost master password and recovery key      | Data is gone for that user           | By design. An admin can grant access again with a new keypair                                                      |
 
@@ -90,11 +95,14 @@ All of this is in `packages/crypto` and tested there.
 - **Granting** happens on an admin's machine: the admin unwraps each
   environment key and wraps it for the new member's public key. Before that,
   the CLI shows the member's fingerprint, and the member sees the same code
-  when accepting. Comparing the two in person or on a call defeats a server
+  when accepting (worked out from their own key, never from the server's
+  answer). Comparing the two in person or on a call defeats a server
   that swaps public keys.
 - **Removing** an active member rotates every environment key in the same
-  transaction: new keys go only to remaining members, and the latest secrets
-  are re-encrypted. Versions written after the removal cannot be decrypted
+  transaction: new keys go only to remaining members and active service
+  tokens, and the latest secrets are re-encrypted. Service tokens the member
+  made are revoked (they saw the full token once) and their unused invites
+  end. Versions written after the removal cannot be decrypted
   with any key the removed member had (tested). Older versions stay readable
   to anyone who kept the old key, so the CLI reminds the admin to change the
   real credentials.
@@ -110,7 +118,8 @@ All of this is in `packages/crypto` and tested there.
 - A leaked token gives read access to that one environment until it is
   revoked or expires. Revoking takes effect on the next request.
 - Rotating an environment's key re-wraps it for its active tokens, so a
-  member's removal does not break CI.
+  member's removal does not break CI, except for tokens that member made:
+  those are revoked with them.
 
 ## Out of scope for v1
 
