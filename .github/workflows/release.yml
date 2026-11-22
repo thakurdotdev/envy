@@ -66,9 +66,10 @@ jobs:
         run: |
           security create-keychain -p ci envy-ci.keychain
           security list-keychains -d user -s envy-ci.keychain $(security list-keychains -d user | tr -d '"')
-          security default-keychain -s envy-ci.keychain
+          security default-keychain -d user -s envy-ci.keychain
           security unlock-keychain -p ci envy-ci.keychain
           security set-keychain-settings envy-ci.keychain
+          echo "Default keychain: $(security default-keychain -d user)"
 
       - name: Smoke test (version and OS keychain)
         env:
