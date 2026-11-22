@@ -156,6 +156,9 @@ describe("web dashboard, end to end", () => {
     // First visit: choose a master password and see the recovery key once.
     await page.getByLabel("Master password").fill(MASTER_PASSWORD);
     await page.getByLabel("Type it again").fill(MASTER_PASSWORD);
+    // The eye button shows what was typed, so typos are easy to spot.
+    await page.getByRole("button", { name: "Show password" }).first().click();
+    expect(await page.getByLabel("Master password").getAttribute("type")).toBe("text");
     await page.getByRole("button", { name: "Set master password" }).click();
     await expectLocator(page.getByTestId("recovery-key")).toBeVisible();
     await page.getByLabel("I have saved my recovery key").check();
