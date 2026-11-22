@@ -48,6 +48,11 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      # The dashboard's browser test needs Chromium and its system libraries.
+      - name: Install Chromium for Playwright
+        working-directory: apps/web
+        run: bunx playwright install --with-deps chromium
+
       # Includes the integration tests, which use the Postgres service above.
       - name: Format, lint, type check and tests
         run: bun run verify
