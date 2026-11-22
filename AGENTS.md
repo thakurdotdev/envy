@@ -71,6 +71,11 @@ apps. The CLI and web import only the API's `type App`, never its runtime code.
 | `bun run db:generate`  | Make a migration from `apps/api/src/db/schema.ts`                                                                                                                                                   |
 | `bun run db:migrate`   | Apply migrations (reads `DATABASE_URL`, see `apps/api/.env.example`)                                                                                                                                |
 
+The web dashboard's browser test needs Chromium once per machine:
+`cd apps/web && bunx playwright install chromium`. UI components come from
+shadcn/ui: add them with `bunx shadcn@4.23.0 add <name>` in `apps/web`, never by
+hand (ADR 0010).
+
 CLI environment variables (for scripts and tests): `ENVY_API_URL`, `ENVY_ENV`,
 `ENVY_CONFIG_DIR`, `ENVY_KEYSTORE=file|keychain`, `ENVY_MASTER_PASSWORD`,
 `ENVY_NO_BROWSER`, `ENVY_DEBUG=1`. See ADR 0008.
