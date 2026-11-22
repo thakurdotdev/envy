@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Install script: shows the platform and version, says which version it updates from, shows a download progress bar, skips an install that is already up to date, and prints the exact PATH line for your shell.
+- `envy upgrade` (also `envy update`): shows the current and new version, a progress bar and the release notes link; adds `--check`, `--force` and picking a version; works on Windows.
+- `envy login` copies the sign-in code to your clipboard before opening GitHub.
+
 ## 0.1.0 (2026-11-22)
 
 First release.

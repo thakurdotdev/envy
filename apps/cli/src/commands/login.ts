@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { openInBrowser } from "../core/browser.ts";
+import { copyToClipboard } from "../core/clipboard.ts";
 import { CliError, EXIT_CODES } from "../core/errors.ts";
 import { getKeystore } from "../core/keystore.ts";
 import { callApi, createPublicClient, openSession, type Session } from "../core/session.ts";
@@ -19,11 +20,7 @@ export async function login(options: LoginOptions): Promise<void> {
   const publicApi = createPublicClient(apiUrl);
 
   const device = await callApi(() => publicApi.v1.auth.github.device.post());
-  output.info(`Your sign-in code is ${output.bold(device.userCode)}`);
-  output.info(`Approve it at ${device.verificationUri}`);
-  if (isInteractive()) {
-    openInBrowser(device.verificationUri);
-  }
+  await showSignInCode(device.userCode, device.verificationUri);
 
   const deviceName = `${hostname()} (${process.platform})`;
   const signedIn = await withSpinner("Waiting for approval on GitHub", () =>
@@ -113,5 +110,27 @@ function showRecoveryKey(recoveryKeyText: string): void {
   output.info(
     "Without the master password or this key, your secrets cannot be recovered by anyone.",
   );
+  output.info("");
+}
+
+/**
+ * Shows the GitHub sign-in code. On a terminal it is also copied to the
+ * clipboard and the approval page is opened, so the user only has to paste.
+ */
+async function showSignInCode(userCode: string, verificationUri: string): Promise<void> {
+  const interactive = isInteractive();
+  const copied = interactive && (await copyToClipboard(userCode));
+  output.info("");
+  output.info(
+    `  Your sign-in code: ${output.bold(userCode)}${copied ? output.dim("  (copied to clipboard)") : ""}`,
+  );
+  if (interactive && !process.env["ENVY_NO_BROWSER"]) {
+    openInBrowser(verificationUri);
+    output.info(
+      `  Opening ${verificationUri} — ${copied ? "paste the code" : "enter the code"} there and approve.`,
+    );
+  } else {
+    output.info(`  Open ${verificationUri}, enter the code and approve.`);
+  }
   output.info("");
 }
