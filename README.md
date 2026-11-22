@@ -13,7 +13,7 @@ After a one-time `envy init`, you only ever type `envy run` or `envy pull`.
 macOS and Linux (checks the download against its published SHA-256):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/thakurdotdev/envy/main/scripts/install.sh | sh
+curl -fsSL https://envy.thakur.dev/install.sh | sh
 ```
 
 Windows: download `envy-windows-x64.exe` from the
@@ -96,7 +96,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - name: Install envy
         run: |
-          curl -fsSL https://raw.githubusercontent.com/thakurdotdev/envy/main/scripts/install.sh | sh
+          curl -fsSL https://envy.thakur.dev/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: bun install
       - name: Test with secrets injected

@@ -86,7 +86,7 @@ function AcceptInvite() {
           </Button>
         ) : (
           <Button asChild variant="outline">
-            <Link href="/">Go to projects</Link>
+            <Link href="/projects">Go to projects</Link>
           </Button>
         )}
       </CardFooter>

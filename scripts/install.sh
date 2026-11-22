@@ -3,7 +3,7 @@
 # the latest GitHub release, checks it against the published SHA-256, and
 # puts it in ~/.local/bin (or $ENVY_INSTALL_DIR).
 #
-#   curl -fsSL https://raw.githubusercontent.com/thakurdotdev/envy/main/scripts/install.sh | sh
+#   curl -fsSL https://envy.thakur.dev/install.sh | sh
 #
 # ENVY_VERSION=v0.1.0 picks a version; ENVY_DOWNLOAD_URL overrides where the
 # files come from (used by tests).

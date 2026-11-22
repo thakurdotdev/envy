@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import { Geist } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-import { SessionProvider } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata = {
   title: "Envy",
@@ -15,10 +15,14 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={cn("font-sans", geist.variable, geistMono.variable)}
+      suppressHydrationWarning
+    >
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <SessionProvider>{children}</SessionProvider>
+          {children}
           <Toaster />
         </ThemeProvider>
       </body>

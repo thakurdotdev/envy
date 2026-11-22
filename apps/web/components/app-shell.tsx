@@ -22,10 +22,10 @@ function Header() {
   return (
     <header className="border-b">
       <nav aria-label="Main" className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
-        <Link href="/" className="font-semibold">
+        <Link href="/projects" className="font-semibold">
           Envy
         </Link>
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link href="/projects" className="text-sm text-muted-foreground hover:text-foreground">
           Projects
         </Link>
         <Link href="/settings" className="text-sm text-muted-foreground hover:text-foreground">
