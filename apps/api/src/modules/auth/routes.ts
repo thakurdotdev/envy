@@ -23,7 +23,7 @@ type AuthRoutesDependencies = {
   auth: AuthService;
   authenticate: Authenticate;
   writeLimiter: RateLimiter;
-  config: Pick<Config, "environment" | "webUrl" | "trustProxy">;
+  config: Pick<Config, "environment" | "webUrl" | "trustedProxies">;
   rateLimiters: AuthRateLimiters;
 };
 
@@ -53,7 +53,8 @@ export function authRoutes({
   // A cookie is only deleted when the path matches, so expire it with the
   // same settings it was set with.
   const expired = { maxAge: 0, expires: new Date(0) };
-  const limit = (limiter: RateLimiter, name: string) => limitByIp(limiter, name, config.trustProxy);
+  const limit = (limiter: RateLimiter, name: string) =>
+    limitByIp(limiter, name, config.trustedProxies);
   const webOrigin = new URL(config.webUrl).origin;
 
   return (
@@ -139,7 +140,7 @@ export function authRoutes({
         { body: RefreshBody, beforeHandle: limit(rateLimiters.refresh, "refresh") },
       )
       // Everything below needs a signed-in user.
-      .use(authGuard(authenticate, config.trustProxy, writeLimiter))
+      .use(authGuard(authenticate, config.trustedProxies, writeLimiter))
       .post("/v1/auth/logout", async ({ actor, cookie, set }) => {
         await auth.logout(requireUser(actor));
         cookie[REFRESH_COOKIE]?.set({ value: "", ...refreshCookie, ...expired });

@@ -15,12 +15,12 @@ import type { MemberService } from "./service.ts";
 export function memberRoutes(dependencies: {
   authenticate: Authenticate;
   members: MemberService;
-  trustProxy: boolean;
+  trustedProxies: number;
   writeLimiter: RateLimiter;
 }) {
-  const { authenticate, members, trustProxy, writeLimiter } = dependencies;
+  const { authenticate, members, trustedProxies, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy, writeLimiter))
+    .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get(
       "/v1/projects/:id/members",
       ({ context, params }) => members.listMembers(context, params.id),

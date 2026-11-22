@@ -23,12 +23,12 @@ const IdParams = t.Object({ id: t.String({ format: "uuid" }) });
 export function tokenRoutes(dependencies: {
   authenticate: Authenticate;
   tokens: TokenService;
-  trustProxy: boolean;
+  trustedProxies: number;
   writeLimiter: RateLimiter;
 }) {
-  const { authenticate, tokens, trustProxy, writeLimiter } = dependencies;
+  const { authenticate, tokens, trustedProxies, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy, writeLimiter))
+    .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get("/v1/tokens/current", ({ context }) => tokens.describeCurrent(context))
     .get("/v1/projects/:id/tokens", ({ context, params }) => tokens.list(context, params.id), {
       params: IdParams,

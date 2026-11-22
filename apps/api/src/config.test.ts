@@ -17,7 +17,7 @@ describe("loadConfig", () => {
     expect(config.port).toBe(3000);
     expect(config.environment).toBe("development");
     expect(config.apiUrl).toBe("http://localhost:3000");
-    expect(config.trustProxy).toBe(false);
+    expect(config.trustedProxies).toBe(0);
   });
 
   test("lists every problem at once and never prints secret values", () => {
@@ -54,5 +54,12 @@ describe("loadConfig", () => {
       WEB_URL: "https://example.com",
     });
     expect(config.environment).toBe("production");
+  });
+
+  test("TRUST_PROXY is a number of proxies; true and false still work", () => {
+    expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "2" }).trustedProxies).toBe(2);
+    expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "true" }).trustedProxies).toBe(1);
+    expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "false" }).trustedProxies).toBe(0);
+    expect(() => loadConfig({ ...validEnvironment, TRUST_PROXY: "9" })).toThrow("TRUST_PROXY");
   });
 });

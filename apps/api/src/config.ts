@@ -15,8 +15,11 @@ export type Config = {
   jwtSecret: string;
   githubClientId: string;
   githubClientSecret: string;
-  /** Trust the X-Forwarded-For header for the client IP (only behind a proxy). */
-  trustProxy: boolean;
+  /**
+   * How many proxies in front of the API append to X-Forwarded-For (0 = trust
+   * none). Behind Cloudflare and nginx it is 2. See lib/client-ip.ts.
+   */
+  trustedProxies: number;
 };
 
 export class ConfigError extends Error {
@@ -46,7 +49,7 @@ export function loadConfig(environment: Environment): Config {
     jwtSecret: read.secret("JWT_SECRET", 32),
     githubClientId: read.text("GITHUB_CLIENT_ID"),
     githubClientSecret: read.text("GITHUB_CLIENT_SECRET"),
-    trustProxy: read.boolean("TRUST_PROXY", false),
+    trustedProxies: read.proxyCount("TRUST_PROXY"),
   };
 
   if (config.environment === "production") {
@@ -118,16 +121,21 @@ function createReader(environment: Environment, problems: string[]) {
     return number;
   }
 
-  function boolean(name: string, fallback: boolean): boolean {
+  // "false" and "true" still work: they mean 0 and 1 proxies.
+  function proxyCount(name: string): number {
     const value = readRaw(name);
-    if (value === undefined) {
-      return fallback;
+    if (value === undefined || value === "false") {
+      return 0;
     }
-    if (value !== "true" && value !== "false") {
-      problems.push(`${name} must be "true" or "false".`);
-      return fallback;
+    if (value === "true") {
+      return 1;
     }
-    return value === "true";
+    const count = Number(value);
+    if (!Number.isInteger(count) || count < 0 || count > 5) {
+      problems.push(`${name} must be how many proxies are in front of the API (0 to 5).`);
+      return 0;
+    }
+    return count;
   }
 
   function oneOf<Option extends string>(name: string, options: Option[], fallback: Option): Option {
@@ -143,5 +151,5 @@ function createReader(environment: Environment, problems: string[]) {
     return match;
   }
 
-  return { text, secret, url, port, boolean, oneOf };
+  return { text, secret, url, port, proxyCount, oneOf };
 }

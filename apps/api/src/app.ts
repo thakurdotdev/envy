@@ -73,7 +73,7 @@ export function createApp(dependencies: AppDependencies) {
     clock,
     webUrl: config.webUrl,
   });
-  const { trustProxy } = config;
+  const { trustedProxies } = config;
   const tokens = createTokenService({ repositories, runInTransaction, access, clock });
   // Service tokens start with "envy_"; everything else is a user's access token.
   const authenticate: Authenticate = (header) =>
@@ -92,18 +92,18 @@ export function createApp(dependencies: AppDependencies) {
   const writeLimiter = createRateLimiter({ limit: 120, windowMs: MINUTE_MS }, clock);
 
   return new Elysia()
-    .use(httpBasics(logger, { writeLimiter, trustProxy: config.trustProxy }))
+    .use(httpBasics(logger, { writeLimiter, trustedProxies: config.trustedProxies }))
     .use(securityHeaders(config.environment === "production"))
     .use(cors({ origin: config.webUrl, credentials: true }))
     .get("/health", () => ({ status: "ok" as const }))
     .use(authRoutes({ auth, authenticate, writeLimiter, config, rateLimiters }))
-    .use(userRoutes({ authenticate, users, trustProxy, writeLimiter }))
-    .use(projectRoutes({ authenticate, projects, trustProxy, writeLimiter }))
-    .use(environmentRoutes({ authenticate, environments, trustProxy, writeLimiter }))
-    .use(secretRoutes({ authenticate, secrets, trustProxy, writeLimiter }))
-    .use(memberRoutes({ authenticate, members, trustProxy, writeLimiter }))
-    .use(tokenRoutes({ authenticate, tokens, trustProxy, writeLimiter }))
-    .use(auditRoutes({ authenticate, audit, trustProxy, writeLimiter }));
+    .use(userRoutes({ authenticate, users, trustedProxies, writeLimiter }))
+    .use(projectRoutes({ authenticate, projects, trustedProxies, writeLimiter }))
+    .use(environmentRoutes({ authenticate, environments, trustedProxies, writeLimiter }))
+    .use(secretRoutes({ authenticate, secrets, trustedProxies, writeLimiter }))
+    .use(memberRoutes({ authenticate, members, trustedProxies, writeLimiter }))
+    .use(tokenRoutes({ authenticate, tokens, trustedProxies, writeLimiter }))
+    .use(auditRoutes({ authenticate, audit, trustedProxies, writeLimiter }));
 }
 
 /** The API's type. The CLI and web import only this, through Eden Treaty. */

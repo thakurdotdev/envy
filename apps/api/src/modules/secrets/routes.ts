@@ -7,12 +7,12 @@ import type { SecretService } from "./service.ts";
 export function secretRoutes(dependencies: {
   authenticate: Authenticate;
   secrets: SecretService;
-  trustProxy: boolean;
+  trustedProxies: number;
   writeLimiter: RateLimiter;
 }) {
-  const { authenticate, secrets, trustProxy, writeLimiter } = dependencies;
+  const { authenticate, secrets, trustedProxies, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy, writeLimiter))
+    .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get(
       "/v1/environments/:id/secrets",
       ({ context, params, query }) => secrets.getSecrets(context, params.id, query.version),

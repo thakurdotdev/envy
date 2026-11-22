@@ -14,7 +14,7 @@ export const testConfig: Config = {
   jwtSecret: "test-only-jwt-secret-that-is-long-enough",
   githubClientId: "test-client-id",
   githubClientSecret: "test-client-secret",
-  trustProxy: false,
+  trustedProxies: 0,
 };
 
 /** The API with a fresh database, a fake GitHub and a clock tests can move. */

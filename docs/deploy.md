@@ -27,17 +27,17 @@ CREATE DATABASE envy_staging OWNER appuser;
 
 Environment variables (the API refuses to start if one is missing or wrong):
 
-| Variable               | Example                                                                                   |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| `APP_ENV`              | `production` (turns on secure cookies and HSTS)                                           |
-| `PORT`                 | set by Shipyard                                                                           |
-| `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network)        |
-| `API_URL`              | `https://api.<domain>`                                                                    |
-| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                          |
-| `JWT_SECRET`           | `openssl rand -base64 48`                                                                 |
-| `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                                 |
-| `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                                 |
-| `TRUST_PROXY`          | `true` when Shipyard's proxy appends the client to `X-Forwarded-For` (last entry is used) |
+| Variable               | Example                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `APP_ENV`              | `production` (turns on secure cookies and HSTS)                                                  |
+| `PORT`                 | set by Shipyard                                                                                  |
+| `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network)               |
+| `API_URL`              | `https://api.<domain>`                                                                           |
+| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                                 |
+| `JWT_SECRET`           | `openssl rand -base64 48`                                                                        |
+| `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                                        |
+| `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                                        |
+| `TRUST_PROXY`          | `2`: Cloudflare then nginx each append to `X-Forwarded-For`, so the client is 2nd from the right |
 
 GitHub OAuth app: enable **Device Flow**; callback URL
 `https://api.<domain>/v1/auth/github/callback`.
@@ -103,3 +103,18 @@ dropdb envy_restore_test
 
 Uptime: Shipyard's health check on `/health`, or a cron job that calls it and
 alerts by email or webhook.
+
+## Client addresses behind Cloudflare
+
+Rate limits count per client address. Cloudflare appends the visitor's
+address to `X-Forwarded-For` and nginx appends Cloudflare's, so the API runs
+with `TRUST_PROXY=2` and takes the second address from the right.
+
+That is only trustworthy if every request really passes through Cloudflare.
+If the server answers on its own IP address, a client can connect to nginx
+directly and put any address in that position. Close that gap with one of:
+
+- allow ports 80 and 443 only from Cloudflare's address ranges in the
+  firewall, or
+- in the API's nginx site, `include /etc/nginx/snippets/tunl-cloudflare-realip.conf;`
+  (trusts `CF-Connecting-IP` only from Cloudflare) and set `TRUST_PROXY=1`.

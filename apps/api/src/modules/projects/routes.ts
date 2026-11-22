@@ -8,12 +8,12 @@ import type { ProjectService } from "./service.ts";
 export function projectRoutes(dependencies: {
   authenticate: Authenticate;
   projects: ProjectService;
-  trustProxy: boolean;
+  trustedProxies: number;
   writeLimiter: RateLimiter;
 }) {
-  const { authenticate, projects, trustProxy, writeLimiter } = dependencies;
+  const { authenticate, projects, trustedProxies, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy, writeLimiter))
+    .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get("/v1/projects", ({ context, query }) => projects.listProjects(context, query), {
       query: IdCursorQuery,
     })
