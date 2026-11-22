@@ -8,7 +8,10 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
-  "include": ["next-env.d.ts", "next.config.ts", "app", "lib"]
+  "include": ["next-env.d.ts", "next.config.ts", "app", "lib", "components", "hooks", "test"]
 }
