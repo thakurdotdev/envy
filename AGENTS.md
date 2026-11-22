@@ -58,18 +58,18 @@ apps. The CLI and web import only the API's `type App`, never its runtime code.
 
 ## Commands
 
-| Command                | What it does                                                         |
-| ---------------------- | -------------------------------------------------------------------- |
-| `bun install`          | Install dependencies and set up the git hooks                        |
-| `docker compose up -d` | Start a local Postgres 16 (set `ENVY_POSTGRES_PORT` if 5432 is busy) |
-| `bun run verify`       | Format check, lint, type check and tests. Must pass before pushing   |
-| `bun run format`       | Format every file                                                    |
-| `bun run lint`         | Lint every file                                                      |
-| `bun test`             | Run tests                                                            |
-| `bun run dev`          | API on :3000 and web on :3001                                        |
-| `bun run build`        | Build the CLI binary, the API binary and the static web site         |
-| `bun run db:generate`  | Make a migration from `apps/api/src/db/schema.ts`                    |
-| `bun run db:migrate`   | Apply migrations (reads `DATABASE_URL`, see `apps/api/.env.example`) |
+| Command                | What it does                                                                                                                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun install`          | Install dependencies and set up the git hooks                                                                                                                                                       |
+| `docker compose up -d` | Start a local Postgres 16 (set `ENVY_POSTGRES_PORT` if 5432 is busy)                                                                                                                                |
+| `bun run verify`       | Format check, lint, type check and tests. Must pass before pushing                                                                                                                                  |
+| `bun run format`       | Format every file                                                                                                                                                                                   |
+| `bun run lint`         | Lint every file                                                                                                                                                                                     |
+| `bun test`             | Run tests. Integration tests (`*.integration.test.ts`) need Postgres: they use `TEST_DATABASE_URL`, then `DATABASE_URL`, then the docker compose database, and make one throwaway database per file |
+| `bun run dev`          | API on :3000 and web on :3001                                                                                                                                                                       |
+| `bun run build`        | Build the CLI binary, the API binary and the static web site                                                                                                                                        |
+| `bun run db:generate`  | Make a migration from `apps/api/src/db/schema.ts`                                                                                                                                                   |
+| `bun run db:migrate`   | Apply migrations (reads `DATABASE_URL`, see `apps/api/.env.example`)                                                                                                                                |
 
 Never add a script called `check`: `bun check` would run it instead of the
 type checker. The all-in-one script is `verify`.
