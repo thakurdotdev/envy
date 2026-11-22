@@ -5,7 +5,9 @@ import { getConfigDir } from "./paths.ts";
 // config.json: non-secret settings. state.json: what the CLI remembers
 // between runs, such as the last version pulled for each environment.
 
-export const DEFAULT_API_URL = "http://localhost:3000";
+// Release builds set ENVY_BUILD_API_URL with `bun build --define`, so the
+// downloaded binary talks to the real server without any setup.
+export const DEFAULT_API_URL = process.env["ENVY_BUILD_API_URL"] || "http://localhost:3000";
 
 type Settings = { apiUrl?: string; lastUserLogin?: string };
 type State = { pulledVersions?: Record<string, number> };
