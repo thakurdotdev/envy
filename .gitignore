@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.next/
+apps/web/out/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+.DS_Store
+
+# Local secrets. Never commit these.
+.env
+.env.*
+!.env.example

@@ -1,0 +1,30 @@
+{
+  "name": "envy",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.5",
+  "engines": {
+    "bun": ">=1.4.5"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --parallel --filter @envy/api --filter @envy/web dev",
+    "verify": "bun run verify:format && bun run lint && bun check -b && bun test",
+    "verify:format": "bun fmt --check",
+    "format": "bun fmt",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "test": "bun test",
+    "build": "bun run --filter '*' build",
+    "db:generate": "bun run --filter @envy/api db:generate",
+    "db:migrate": "bun run --filter @envy/api db:migrate",
+    "prepare": "bun scripts/install-git-hooks.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.5",
+    "oxlint": "1.94.0",
+    "oxlint-tsgolint": "7.0.2008"
+  }
+}

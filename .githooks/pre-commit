@@ -1,0 +1,12 @@
+#!/bin/sh
+# Formats the staged files (and stages the result), then lints them.
+# Skip once with: git commit --no-verify
+set -e
+
+bun fmt --staged
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')
+if [ -n "$staged" ]; then
+  # shellcheck disable=SC2086
+  bunx oxlint --type-aware --deny-warnings $staged
+fi

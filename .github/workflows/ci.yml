@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: appuser
+          POSTGRES_PASSWORD: appuser
+          POSTGRES_DB: envy
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U appuser -d envy"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgres://appuser:appuser@localhost:5432/envy
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Reads the exact version from the packageManager field.
+          bun-version-file: package.json
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Format, lint, type check and unit tests
+        run: bun run verify
+
+      # Integration tests (real Postgres) start in Phase 2. Until then this
+      # step proves the migrations run against a clean database.
+      - name: Database migrations
+        run: bun run db:migrate
+
+  build:
+    name: Build binaries
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter @envy/cli --filter @envy/api build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries-linux-x64
+          path: |
+            apps/cli/dist/envy
+            apps/api/dist/envy-api
+          retention-days: 7
