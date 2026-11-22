@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { CopyButton } from "@/components/copy-button";
+import { InlineCode } from "@/components/inline-code";
 import { CopyCommand } from "@/components/site/copy-command";
 import { GITHUB_URL, INSTALL_COMMAND, RELEASES_URL } from "@/components/site/links";
 
@@ -26,23 +28,29 @@ const CI_EXAMPLE = `- name: Install envy
 
 export default function DocsPage() {
   return (
-    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-12 px-4 py-12 md:grid-cols-[11rem_minmax(0,1fr)]">
-      <nav aria-label="On this page" className="hidden md:block">
-        <ul className="sticky top-24 space-y-2 text-sm">
-          {SECTIONS.map((section) => (
-            <li key={section.id}>
-              <a href={`#${section.id}`} className="text-muted-foreground hover:text-foreground">
-                {section.title}
-              </a>
-            </li>
-          ))}
-        </ul>
+    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-12 px-4 py-12 sm:px-6 md:py-16 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-16">
+      <nav aria-label="On this page" className="hidden lg:block">
+        <div className="sticky top-24">
+          <p className="mb-3 text-xs font-medium text-muted-foreground">On this page</p>
+          <ul className="space-y-0.5 border-l text-sm">
+            {SECTIONS.map((section) => (
+              <li key={section.id}>
+                <a
+                  href={`#${section.id}`}
+                  className="-ml-px block border-l border-transparent py-1.5 pl-3.5 text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                >
+                  {section.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       </nav>
 
-      <main className="min-w-0 max-w-2xl space-y-14">
-        <header className="space-y-3">
-          <h1 className="text-3xl font-semibold tracking-tight">Docs</h1>
-          <p className="text-muted-foreground">
+      <main className="min-w-0 max-w-2xl space-y-16">
+        <header className="space-y-3 border-b pb-10">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Docs</h1>
+          <p className="text-lg text-pretty text-muted-foreground">
             Everything you need to start. Set up once, then you mostly type <Code>envy run</Code> or{" "}
             <Code>envy pull</Code>.
           </p>
@@ -155,9 +163,7 @@ export default function DocsPage() {
           <p>
             Save it as a repository secret called <Code>ENVY_TOKEN</Code>. Then in GitHub Actions:
           </p>
-          <pre className="overflow-x-auto rounded-lg border bg-muted/40 p-4 font-mono text-[13px] leading-6">
-            {CI_EXAMPLE}
-          </pre>
+          <CodeBlock title=".github/workflows/test.yml" code={CI_EXAMPLE} />
           <p>
             The token can only read that one environment. Remove it with{" "}
             <Code>envy token revoke github-actions</Code>.
@@ -181,19 +187,23 @@ function Section({ id, title, children }: { id: string; title: string; children:
   return (
     <section id={id} aria-labelledby={`${id}-title`} className="scroll-mt-24 space-y-4">
       <h2 id={`${id}-title`} className="text-xl font-semibold tracking-tight">
-        {title}
+        <a href={`#${id}`} className="transition-colors hover:text-muted-foreground">
+          {title}
+        </a>
       </h2>
-      <div className="space-y-4 leading-7">{children}</div>
+      <div className="space-y-4 leading-7 text-pretty">{children}</div>
     </section>
   );
 }
 
 function Commands({ rows }: { rows: [command: string, meaning: string][] }) {
   return (
-    <dl className="divide-y rounded-lg border">
+    <dl className="divide-y overflow-hidden rounded-lg border bg-card shadow-xs">
       {rows.map(([command, meaning]) => (
-        <div key={command} className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:gap-6">
-          <dt className="font-mono text-[13px] sm:w-72 sm:shrink-0">{command}</dt>
+        <div key={command} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:gap-6">
+          <dt className="scrollbar-none overflow-x-auto font-mono text-sm whitespace-nowrap sm:w-72 sm:shrink-0">
+            {command}
+          </dt>
           <dd className="text-sm text-muted-foreground">{meaning}</dd>
         </div>
       ))}
@@ -201,13 +211,33 @@ function Commands({ rows }: { rows: [command: string, meaning: string][] }) {
   );
 }
 
-function Code({ children }: { children: ReactNode }) {
-  return <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">{children}</code>;
+const Code = InlineCode;
+
+/** A file shown in a dark box, as in an editor, with a button that copies it. */
+function CodeBlock({ title, code }: { title: string; code: string }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-code-border bg-code text-code-foreground shadow-xs">
+      <div className="flex items-center justify-between gap-3 border-b border-code-border py-1.5 pr-1.5 pl-4">
+        <span className="truncate font-mono text-xs text-code-muted">{title}</span>
+        <CopyButton
+          text={code}
+          label="example"
+          variant="ghost"
+          size="icon-sm"
+          className="text-code-muted hover:bg-code-foreground/10 hover:text-code-foreground dark:hover:bg-code-foreground/10"
+        />
+      </div>
+      <pre className="overflow-x-auto p-4 font-mono text-sm leading-6">{code}</pre>
+    </div>
+  );
 }
 
 function A({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <a href={href} className="underline underline-offset-4">
+    <a
+      href={href}
+      className="text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+    >
       {children}
     </a>
   );
