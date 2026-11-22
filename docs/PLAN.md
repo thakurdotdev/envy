@@ -8,7 +8,7 @@
 | ---------------------------------------------- | -------------------------- |
 | Phase 0 — Foundation                           | Done (macOS spike pending) |
 | Phase 1 — Crypto package                       | Done                       |
-| Phase 2 — API core: auth and users             | Not started                |
+| Phase 2 — API core: auth and users             | Done                       |
 | Phase 3 — API: projects, environments, secrets | Not started                |
 | Phase 4 — CLI core                             | Not started                |
 | Phase 5 — Teams and access                     | Not started                |
@@ -408,15 +408,30 @@ Open questions: none.
 
 Goal: a user can sign in with GitHub from the CLI or web and store their key material.
 
-- [ ] `config.ts` validating env vars; app fails fast on bad config
-- [ ] Drizzle setup, users and sessions tables, first migration
-- [ ] AppError, error handler plugin, logger with redaction, request IDs
-- [ ] GitHub device flow + web callback; access JWT + rotating refresh token
-- [ ] authGuard plugin; /v1/me, /v1/me/keys, sessions list and revoke
-- [ ] Rate limiting on auth routes
-- [ ] Export `type App`, used by the Eden client in the CLI and web
+- [x] `config.ts` validating env vars; app fails fast on bad config
+- [x] Drizzle setup, users and sessions tables, first migration
+- [x] AppError, error handler plugin, logger with redaction, request IDs
+- [x] GitHub device flow + web callback; access JWT + rotating refresh token
+- [x] authGuard plugin; /v1/me, /v1/me/keys, sessions list and revoke
+- [x] Rate limiting on auth routes
+- [x] Export `type App`, used by the Eden client in the CLI and web
 
 Done when: integration tests (real Postgres) cover login, refresh rotation, reuse of an old refresh token revoking the session, and key upload. A small Eden client test calls every route with full types.
+
+#### Phase 2 summary (2026-11-22)
+
+Built:
+
+- `config.ts` (fails fast with every problem listed), Drizzle `users` and `sessions` tables with the first migration.
+- `AppError`, one error handler with the shared error shape, request ids, a logger that redacts sensitive field names, per-IP rate limits on the auth routes.
+- GitHub device flow (CLI) and redirect flow (web, with a state cookie), 15-minute access JWTs, 30-day refresh tokens that rotate on every use; reusing an old one ends the session.
+- `authGuard`, `/v1/me`, `/v1/me/keys` (first setup only, sizes checked), `/v1/me/sessions` list and revoke, `/v1/auth/logout`.
+- `type App` used by typed Eden clients in `apps/cli/src/core/api.ts` and `apps/web/lib/api.ts`.
+- Integration tests against real Postgres (one new database per test file, fake GitHub, controllable clock): device and web sign-in, refresh rotation, reuse revoking the session, expiry, logout, session revoke, rate limit, key upload and validation. An Eden test calls every route with full types.
+
+Changed from the plan (ADR 0006): `jose` instead of `@elysiajs/jwt`; an extra `GET /v1/auth/github/login` route to start web sign-in; sessions list is not paginated.
+
+Open questions: concurrent refreshes from two CLI processes end the session (no grace window). Phase 4 must refresh under a lock.
 
 ### Phase 3 — API: projects, environments, secrets
 
