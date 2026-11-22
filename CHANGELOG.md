@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-22)
 
 First release.
 
@@ -8,5 +8,6 @@ First release.
 - CLI: `login`, `init`, `pull`, `push`, `run`, `set`, `unset`, `get`, `use`, `env`, `history`, `rollback`, `members`, `accept`, `token`, `doctor`, `completion`, `upgrade`.
 - Teams: email-bound invites, fingerprint-checked grants, roles, removal with automatic key rotation.
 - CI: read-only service tokens (`ENVY_TOKEN`) for one environment.
-- Web dashboard: projects, secret editor, history and rollback, members, service tokens, audit log, devices.
+- Web dashboard: projects, a secret editor with a table and a .env view (paste or drop a whole .env), history and rollback, members, service tokens, audit log, devices.
+- Website: landing page, docs, and the install script at `https://envy.thakur.dev/install.sh`.
 - Hardening: security headers, CORS allow-list, body size limits, rate limits on sign-in and every write.
