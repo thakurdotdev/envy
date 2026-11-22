@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- API: `TRUST_PROXY` is now the number of proxies in front of the API. Behind Cloudflare and nginx, set it to `2` so rate limits count each visitor, not Cloudflare's edge (`true` still means 1).
+- API: `TRUST_PROXY` is now the number of proxies in front of the API that append to `X-Forwarded-For` (`true` still means 1). See `docs/deploy.md` for running behind Cloudflare.
 
 ## 0.1.2 (2026-11-22)
 
