@@ -17,7 +17,7 @@ export type Config = {
   githubClientSecret: string;
   /**
    * How many proxies in front of the API append to X-Forwarded-For (0 = trust
-   * none). Behind Cloudflare and nginx it is 2. See lib/client-ip.ts.
+   * none). See lib/client-ip.ts and docs/deploy.md.
    */
   trustedProxies: number;
 };
