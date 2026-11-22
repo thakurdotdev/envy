@@ -78,7 +78,8 @@ hand (ADR 0010).
 
 CLI environment variables (for scripts and tests): `ENVY_API_URL`, `ENVY_ENV`,
 `ENVY_CONFIG_DIR`, `ENVY_KEYSTORE=file|keychain`, `ENVY_MASTER_PASSWORD`,
-`ENVY_NO_BROWSER`, `ENVY_DEBUG=1`. See ADR 0008.
+`ENVY_NO_BROWSER`, `ENVY_DEBUG=1`, `DO_NOT_TRACK=1` / `ENVY_NO_ANALYTICS=1`
+(no upgrade count), `ENVY_ANALYTICS_URL` (tests). See ADR 0008 and ADR 0015.
 
 Never add a script called `check`: `bun check` would run it instead of the
 type checker. The all-in-one script is `verify`.

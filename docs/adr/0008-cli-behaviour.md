@@ -16,7 +16,8 @@ leaves open.
 - **Environment variables** for scripts and tests: `ENVY_API_URL`,
   `ENVY_ENV`, `ENVY_CONFIG_DIR` (default `~/.config/envy`),
   `ENVY_KEYSTORE=keychain|file`, `ENVY_MASTER_PASSWORD`, `ENVY_NO_BROWSER`,
-  `ENVY_DEBUG=1`. `ENVY_MASTER_PASSWORD` exists so a person can script their
+  `ENVY_DEBUG=1`, and `DO_NOT_TRACK` / `ENVY_NO_ANALYTICS` (ADR 0015).
+  `ENVY_MASTER_PASSWORD` exists so a person can script their
   own machine; CI should use service tokens (Phase 7).
 - **Default API URL is `http://localhost:3000`** until a public server exists.
   `envy login --api-url <url>` saves another one in `config.json`.

@@ -56,6 +56,12 @@ export default function DocsPage() {
             <Code>envy-windows-x64.exe</Code> from the <A href={RELEASES_URL}>latest release</A>.
             Update any time with <Code>envy upgrade</Code>.
           </p>
+          <p>
+            The install script and <Code>envy upgrade</Code> each send one anonymous count: install,
+            update or upgrade, the version, your OS and CPU, and whether it ran in CI. Nothing about
+            you, your projects or your secrets, and no other command ever calls home. Set{" "}
+            <Code>DO_NOT_TRACK=1</Code> (or <Code>ENVY_NO_ANALYTICS=1</Code>) to turn it off.
+          </p>
         </Section>
 
         <Section id="sign-in" title="Sign in">
