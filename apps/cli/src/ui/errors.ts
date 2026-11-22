@@ -61,6 +61,32 @@ const FIXES: Record<ErrorCode, { hint?: string; exitCode: ExitCode }> = {
     exitCode: EXIT_CODES.userError,
     hint: "Split the values across environments.",
   },
+  KEYS_NOT_SET: {
+    exitCode: EXIT_CODES.userError,
+    hint: "They need to run envy login once to set up their keys.",
+  },
+  INVITE_NOT_FOUND: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Ask a project admin for a new invite.",
+  },
+  INVITE_EMAIL_MISMATCH: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Sign in with the GitHub account that uses that email, or ask for an invite to your email.",
+  },
+  ALREADY_MEMBER: { exitCode: EXIT_CODES.userError, hint: "Run envy members ls to see the team." },
+  MEMBER_NOT_FOUND: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Run envy members ls to see the team.",
+  },
+  MEMBER_NOT_PENDING: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Run envy members ls to see the team.",
+  },
+  OWNER_CANNOT_CHANGE: { exitCode: EXIT_CODES.userError },
+  ROTATION_MISMATCH: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Try again; the project changed meanwhile.",
+  },
 };
 
 export function fixForErrorCode(code: ErrorCode): { hint?: string; exitCode: ExitCode } {

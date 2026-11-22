@@ -11,6 +11,15 @@ import { push } from "./commands/push.ts";
 import { run } from "./commands/run.ts";
 import { useEnvironment } from "./commands/use.ts";
 import { getVariable, setVariables, unsetVariables } from "./commands/variables.ts";
+import { acceptInvite } from "./commands/accept.ts";
+import { history, rollback } from "./commands/history.ts";
+import {
+  changeRole,
+  grantPending,
+  inviteMember,
+  listTeam,
+  removeFromTeam,
+} from "./commands/members.ts";
 import { CliError, EXIT_CODES } from "./core/errors.ts";
 import { output } from "./ui/output.ts";
 
@@ -102,6 +111,55 @@ program
   .argument("<environment>")
   .action(useEnvironment);
 
+program
+  .command("history")
+  .description("list the versions of an environment")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .option("-n, --limit <count>", "how many versions to show", "20")
+  .action(history);
+
+program
+  .command("rollback")
+  .description("make an old version the current one (saved as a new version)")
+  .argument("<version>")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .action(rollback);
+
+const members = program.command("members").description("manage who can read this project");
+members.command("ls").description("list members with their key fingerprints").action(listTeam);
+members
+  .command("invite")
+  .description("invite someone by email; prints a link to send them")
+  .argument("<email>")
+  .option("-r, --role <role>", "admin, member or viewer", "member")
+  .action(inviteMember);
+members
+  .command("grant")
+  .description("give waiting members the keys (after checking their fingerprint)")
+  .argument("[member]", "GitHub login or email; leave out for everyone waiting")
+  .option(...yesOption)
+  .action(grantPending);
+members
+  .command("rm")
+  .description("remove a member and change every environment key")
+  .argument("<member>")
+  .option(...yesOption)
+  .action(removeFromTeam);
+members
+  .command("role")
+  .description("change a member's role")
+  .argument("<member>")
+  .argument("<role>", "admin, member or viewer")
+  .action(changeRole);
+
+program
+  .command("accept")
+  .description("join a project with the invite link you were sent")
+  .argument("<link>")
+  .action(acceptInvite);
+
 function handleError(error: unknown): never {
   const debug = program.opts()["debug"] === true || process.env["ENVY_DEBUG"] === "1";
   if (error instanceof CliError) {
@@ -117,7 +175,10 @@ function handleError(error: unknown): never {
       "Run envy login again. If it keeps happening, tell a project admin.",
     );
   } else {
-    output.error("Something went wrong inside envy.", "Run it again with --debug to see details.");
+    output.error(
+      "Something went wrong inside envy.",
+      "Run it again with ENVY_DEBUG=1 to see details.",
+    );
   }
   if (debug && error instanceof Error) {
     output.info(output.dim(error.stack ?? error.message));
