@@ -18,7 +18,7 @@ const SECTIONS = [
 
 const CI_EXAMPLE = `- name: Install envy
   run: |
-    curl -fsSL https://raw.githubusercontent.com/thakurdotdev/envy/main/scripts/install.sh | sh
+    curl -fsSL https://envy.thakur.dev/install.sh | sh
     echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 - run: envy run -- bun test
   env:

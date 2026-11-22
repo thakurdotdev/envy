@@ -33,7 +33,7 @@ Environment variables (the API refuses to start if one is missing or wrong):
 | `PORT`                 | set by Shipyard                                                                    |
 | `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network) |
 | `API_URL`              | `https://api.<domain>`                                                             |
-| `WEB_URL`              | `https://app.<domain>` (CORS allow-list and sign-in redirect)                      |
+| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                   |
 | `JWT_SECRET`           | `openssl rand -base64 48`                                                          |
 | `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                          |
 | `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                          |
@@ -42,8 +42,10 @@ Environment variables (the API refuses to start if one is missing or wrong):
 GitHub OAuth app: enable **Device Flow**; callback URL
 `https://api.<domain>/v1/auth/github/callback`.
 
-Serve the web and the API on the same site (`app.<domain>` and
-`api.<domain>`), so the refresh cookie (`SameSite=Lax`) works.
+The web lives at `https://envy.thakur.dev`. Keep the API on the same site
+(for example `api.envy.thakur.dev`), so the refresh cookie (`SameSite=Lax`)
+works. The web build also serves the CLI install script at
+`https://envy.thakur.dev/install.sh`.
 
 ## 3. Web (Shipyard static site)
 
