@@ -1,9 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 (2026-11-22)
 
-- The install script and `envy upgrade` send one anonymous count (install, update or upgrade; version; OS and CPU; CI or not). Nothing else, and no other command calls home. `DO_NOT_TRACK=1` or `ENVY_NO_ANALYTICS=1` turns it off.
-
+- CLI: the install script and `envy upgrade` send one anonymous count (install, update or upgrade; version; OS and CPU; CI or not). Nothing else, and no other command calls home. `DO_NOT_TRACK=1` or `ENVY_NO_ANALYTICS=1` turns it off.
+- Dashboard: pages switch instantly (the header stays, data is kept while it refreshes), project pages share a breadcrumb and tabs, and risky actions (save, rollback, give access, remove, revoke, sign out a device) ask first and show progress.
+- Dashboard fixes: a new service token is now shown (it was created but never displayed), and switching environment tabs no longer drops unsaved edits.
+- Dashboard: service tokens can expire; the audit log says who did what in plain words; save takes an optional note; works on phones.
+- Website: page views on the landing page and docs (Umami). The dashboard loads no analytics.
 - API: `TRUST_PROXY` is now the number of proxies in front of the API that append to `X-Forwarded-For` (`true` still means 1). See `docs/deploy.md` for running behind Cloudflare.
 
 ## 0.1.2 (2026-11-22)
