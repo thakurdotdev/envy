@@ -4,17 +4,17 @@
 
 ## Progress
 
-| Phase                                          | Status                     |
-| ---------------------------------------------- | -------------------------- |
-| Phase 0 — Foundation                           | Done (macOS spike pending) |
-| Phase 1 — Crypto package                       | Done                       |
-| Phase 2 — API core: auth and users             | Done                       |
-| Phase 3 — API: projects, environments, secrets | Done                       |
-| Phase 4 — CLI core                             | Done                       |
-| Phase 5 — Teams and access                     | Done                       |
-| Phase 6 — Web dashboard                        | Done                       |
-| Phase 7 — CI tokens and polish                 | Done                       |
-| Phase 8 — Hardening and release                | Not started                |
+| Phase                                          | Status                                                |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| Phase 0 — Foundation                           | Done (macOS keychain checked by the release workflow) |
+| Phase 1 — Crypto package                       | Done                                                  |
+| Phase 2 — API core: auth and users             | Done                                                  |
+| Phase 3 — API: projects, environments, secrets | Done                                                  |
+| Phase 4 — CLI core                             | Done                                                  |
+| Phase 5 — Teams and access                     | Done                                                  |
+| Phase 6 — Web dashboard                        | Done                                                  |
+| Phase 7 — CI tokens and polish                 | Done                                                  |
+| Phase 8 — Hardening and release                | Code done; deploy and first release pending           |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
 
@@ -587,14 +587,30 @@ Open questions:
 
 Goal: safe to give to other people.
 
-- [ ] Security headers, CORS allow-list, body size limits, rate limits on all write routes
-- [ ] Dependency audit; review of every place secrets touch memory, logs and errors
-- [ ] Cross-platform binaries (macOS arm64/x64, Linux arm64/x64, Windows x64) with checksums
-- [ ] Install script (`curl … | sh`) that verifies the checksum
+- [x] Security headers, CORS allow-list, body size limits, rate limits on all write routes
+- [x] Dependency audit; review of every place secrets touch memory, logs and errors
+- [x] Cross-platform binaries (macOS arm64/x64, Linux arm64/x64, Windows x64) with checksums
+- [x] Install script (`curl … | sh`) that verifies the checksum
 - [ ] Deploy API and web through Shipyard (envy database for appuser on the existing Postgres, migrations as a release step, static web build), plus nightly backups
-- [ ] README, docs site page for each command, CHANGELOG
+- [x] README, docs site page for each command, CHANGELOG
 
 Done when: a new user on a clean machine can install, sign up, init, invite a teammate and run their app by following only the README.
+
+#### Phase 8 summary (2026-11-22)
+
+Built:
+
+- Security headers on every API response (HSTS in production), CORS limited to `WEB_URL`, 256 KiB body limit, rate limits on every write per IP and per user or token.
+- `bun audit` (two moderate advisories, both in development-only tools) and a written review of every place secrets touch memory, logs, errors and the network: `docs/security-review.md`.
+- Release workflow: native builds for Linux x64/arm64, macOS arm64/x64 and Windows x64, each smoke-tested including the OS keychain, published with `checksums.txt` on `v*` tags; the default API URL is baked in from a repository variable.
+- `scripts/install.sh` (checksum-verified, tested against a fake release, shellcheck-clean) and `envy upgrade`.
+- `docs/deploy.md` (Shipyard commands, database, environment variables, web headers, backups and restore test), a page per command in `docs/commands/`, `CHANGELOG.md`, and a README that walks a new user through install, sign-up, init, invite and run.
+
+Not done (needs the owner):
+
+- [ ] Deploy the API and web through Shipyard, create the `envy` database for `appuser`, and set up the nightly backup cron (`docs/deploy.md`).
+- [ ] Set the `ENVY_API_URL` repository variable, make releases public, and tag `v0.1.0`.
+- [ ] Run the final check: a new user on a clean machine follows only the README.
 
 ## Testing, CI and release
 
