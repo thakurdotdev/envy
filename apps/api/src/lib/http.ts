@@ -35,7 +35,12 @@ export function httpBasics(logger: Logger) {
     .onError({ as: "global" }, ({ code, error, set, request }) => {
       // A plain Response keeps the error shape out of every route's success
       // type, so Eden clients see errors only as errors.
-      const respond = (status: number, errorCode: ErrorCode, message: string) => {
+      const respond = (
+        status: number,
+        errorCode: ErrorCode,
+        message: string,
+        details?: Record<string, string | number>,
+      ) => {
         // Also recorded on `set`, which the request log reads.
         set.status = status;
         const headers = new Headers({ "content-type": "application/json" });
@@ -44,11 +49,14 @@ export function httpBasics(logger: Logger) {
             headers.set(name, String(value));
           }
         }
-        return new Response(JSON.stringify(toErrorBody(errorCode, message)), { status, headers });
+        return new Response(JSON.stringify(toErrorBody(errorCode, message, details)), {
+          status,
+          headers,
+        });
       };
 
       if (error instanceof AppError) {
-        return respond(error.httpStatus, error.code, error.message);
+        return respond(error.httpStatus, error.code, error.message, error.details);
       }
       if (code === "VALIDATION") {
         // Name the field, never the value: the value could be a secret.
