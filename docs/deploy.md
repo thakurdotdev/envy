@@ -27,17 +27,17 @@ CREATE DATABASE envy_staging OWNER appuser;
 
 Environment variables (the API refuses to start if one is missing or wrong):
 
-| Variable               | Example                                                                            |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| `APP_ENV`              | `production` (turns on secure cookies and HSTS)                                    |
-| `PORT`                 | set by Shipyard                                                                    |
-| `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network) |
-| `API_URL`              | `https://api.<domain>`                                                             |
-| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                   |
-| `JWT_SECRET`           | `openssl rand -base64 48`                                                          |
-| `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                          |
-| `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                          |
-| `TRUST_PROXY`          | `true` when Shipyard's proxy sets `X-Forwarded-For`                                |
+| Variable               | Example                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| `APP_ENV`              | `production` (turns on secure cookies and HSTS)                                           |
+| `PORT`                 | set by Shipyard                                                                           |
+| `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network)        |
+| `API_URL`              | `https://api.<domain>`                                                                    |
+| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                          |
+| `JWT_SECRET`           | `openssl rand -base64 48`                                                                 |
+| `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                                 |
+| `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                                 |
+| `TRUST_PROXY`          | `true` when Shipyard's proxy appends the client to `X-Forwarded-For` (last entry is used) |
 
 GitHub OAuth app: enable **Device Flow**; callback URL
 `https://api.<domain>/v1/auth/github/callback`.
@@ -66,7 +66,10 @@ Referrer-Policy: no-referrer
 Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.<domain>; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; frame-ancestors 'none'
 ```
 
-(`wasm-unsafe-eval` is needed by libsodium, which runs as WebAssembly.)
+(`wasm-unsafe-eval` is needed by libsodium, which runs as WebAssembly.) The
+pages also carry the same policy (without `frame-ancestors`, which only
+works as a header) and `no-referrer` in their HTML, so they stay protected
+if the headers are missing.
 
 ## 4. CLI release
 

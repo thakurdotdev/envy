@@ -62,6 +62,23 @@ describe("hardening", () => {
     }
   });
 
+  test("made-up addresses in front of the proxy's own do not dodge sign-in limits", async () => {
+    const behindProxy = await createTestApp({ trustProxy: true });
+    try {
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 11; attempt += 1) {
+        // The client sends a new fake address each time; the proxy appends the real one.
+        const response = await behindProxy.request("POST", "/v1/auth/github/device", {
+          headers: { "x-forwarded-for": `10.0.0.${attempt}, 198.51.100.7` },
+        });
+        statuses.push(response.status);
+      }
+      expect(statuses.at(-1)).toBe(429);
+    } finally {
+      await behindProxy.close();
+    }
+  });
+
   test("anonymous writes from one address are limited too", async () => {
     const fresh = await createTestApp();
     try {
