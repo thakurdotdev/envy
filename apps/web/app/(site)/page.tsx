@@ -67,7 +67,7 @@ export default function LandingPage() {
               <Link href="/docs">Read the docs</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/projects">Open dashboard</Link>
+              <a href="/projects">Open dashboard</a>
             </Button>
           </div>
         </div>

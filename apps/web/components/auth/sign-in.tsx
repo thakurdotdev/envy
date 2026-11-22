@@ -1,5 +1,4 @@
 import { LockKeyhole } from "lucide-react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { signInUrl } from "@/lib/api";
 import { AuthLayout } from "./auth-layout";
@@ -14,9 +13,9 @@ export function SignIn() {
           Prefer the terminal? Run{" "}
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">envy login</code>
           .{" "}
-          <Link href="/docs" className="underline underline-offset-4">
+          <a href="/docs" className="underline underline-offset-4">
             Read the docs
-          </Link>
+          </a>
         </>
       }
     >

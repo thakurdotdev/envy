@@ -1,5 +1,4 @@
 import { Check } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +22,7 @@ export function AuthLayout({
   return (
     <div className="flex min-h-svh flex-col bg-muted/30">
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+        <a href="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <span
             aria-hidden
             className="flex size-6 items-center justify-center rounded-md bg-red-600 text-xs text-white"
@@ -31,10 +30,10 @@ export function AuthLayout({
             E
           </span>
           Envy
-        </Link>
-        <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground">
+        </a>
+        <a href="/docs" className="text-sm text-muted-foreground hover:text-foreground">
           Help
-        </Link>
+        </a>
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pt-[8vh] pb-16">
         <div className="w-full max-w-md space-y-6">
