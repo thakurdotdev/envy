@@ -19,9 +19,11 @@ version as the latest without any client noticing.
   `X-Forwarded-For`,** not taken from the left. Each proxy appends the address
   it saw; everything before those comes from the client, who could otherwise
   dodge every per-IP rate limit by sending a new fake address each time.
-  `TRUST_PROXY` is the number of proxies (2 for Cloudflare then nginx: the
-  client is second from the right). It first shipped as "the last entry",
-  which behind Cloudflare picked Cloudflare's edge and made users share limits.
+  `TRUST_PROXY` is the number of proxies that append to the header. It first
+  shipped as "the last entry", which behind Cloudflare picked Cloudflare's
+  edge and made users share limits. Production now has nginx restore the
+  visitor's address from Cloudflare (only for Cloudflare's ranges), so the
+  last entry is the visitor and `TRUST_PROXY=1`; see `docs/deploy.md`.
 - **Only the previous refresh token counts as reuse.** Sessions store the
   hash of the token they replaced (`previous_refresh_token_hash`). That token
   still ends the whole session (`REFRESH_TOKEN_REUSED`); any other wrong
