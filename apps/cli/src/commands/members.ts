@@ -129,8 +129,21 @@ export async function removeFromTeam(who: string, options: YesOption): Promise<v
       throw new CliError("Stopped. Nobody was removed.");
     }
   }
-  await removeMember(session, await getUnlockedKeys(session), projectId, member);
+  const { revokedTokens } = await removeMember(
+    session,
+    await getUnlockedKeys(session),
+    projectId,
+    member,
+  );
   output.success(`Removed @${member.githubLogin} and changed every environment key.`);
+  if (revokedTokens.length > 0) {
+    const names = revokedTokens
+      .map((token) => `"${token.name}" (${token.environmentName})`)
+      .join(", ");
+    output.warn(
+      `Revoked the service tokens @${member.githubLogin} made: ${names}. Make new ones with envy token create and update your CI.`,
+    );
+  }
   if (member.status === "active") {
     output.warn(
       `@${member.githubLogin} may still have copies of the old values. Change the real credentials (database passwords, API keys) too.`,

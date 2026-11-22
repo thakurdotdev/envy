@@ -4,7 +4,7 @@ import { copyToClipboard } from "../core/clipboard.ts";
 import { CliError, EXIT_CODES } from "../core/errors.ts";
 import { getKeystore } from "../core/keystore.ts";
 import { callApi, createPublicClient, openSession, type Session } from "../core/session.ts";
-import { resolveApiUrl, updateSettings } from "../core/settings.ts";
+import { checkApiUrl, resolveApiUrl, updateSettings } from "../core/settings.ts";
 import { setUpNewKeys, unlockWithMasterPassword } from "../core/unlock.ts";
 import { output } from "../ui/output.ts";
 import { askConfirm, isInteractive, withSpinner } from "../ui/prompts.ts";
@@ -14,7 +14,7 @@ export type LoginOptions = { apiUrl?: string };
 
 export async function login(options: LoginOptions): Promise<void> {
   if (options.apiUrl !== undefined) {
-    await updateSettings({ apiUrl: options.apiUrl.replace(/\/+$/, "") });
+    await updateSettings({ apiUrl: checkApiUrl(options.apiUrl) });
   }
   const apiUrl = await resolveApiUrl();
   const publicApi = createPublicClient(apiUrl);

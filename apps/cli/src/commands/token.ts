@@ -11,6 +11,7 @@ import { openProjectContext, type EnvironmentOptions } from "../core/context.ts"
 import { CliError } from "../core/errors.ts";
 import { requireProjectLink } from "../core/project-link.ts";
 import { openSession } from "../core/session.ts";
+import { checkPublicKeys } from "../core/trust.ts";
 import { output } from "../ui/output.ts";
 
 export type CreateTokenOptions = EnvironmentOptions & { name?: string; expires?: string };
@@ -46,7 +47,18 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
     wrappedKey,
     ...(expiresAt === undefined ? {} : { expiresAt }),
   };
-  await session.call((api) => api.v1.projects({ id: found.link.projectId }).tokens.post(body));
+  const created = await session.call((api) =>
+    api.v1.projects({ id: found.link.projectId }).tokens.post(body),
+  );
+  // Made here, so this is the one time the key is known to be right.
+  await checkPublicKeys([
+    {
+      kind: "token",
+      id: created.id,
+      label: `the service token "${name}"`,
+      publicKey: body.publicKey,
+    },
+  ]);
   const token = `envy_${tokenId}_${await toBase64Url(tokenKeys.privateKey)}`;
   await clearKey(tokenKeys.privateKey);
 
