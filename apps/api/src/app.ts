@@ -23,6 +23,8 @@ import { createProjectService } from "./modules/projects/service.ts";
 import { secretRoutes } from "./modules/secrets/routes.ts";
 import { createSecretService } from "./modules/secrets/service.ts";
 import { createRepositories, createRunInTransaction } from "./repositories.ts";
+import { memberRoutes } from "./modules/members/routes.ts";
+import { createMemberService } from "./modules/members/service.ts";
 
 /** Everything the API needs from outside. Tests pass their own versions. */
 export type AppDependencies = {
@@ -60,6 +62,13 @@ export function createApp(dependencies: AppDependencies) {
   const environments = createEnvironmentService({ repositories, runInTransaction, access });
   const secrets = createSecretService({ repositories, runInTransaction, access });
   const audit = createAuditService({ audit: repositories.audit, access });
+  const members = createMemberService({
+    repositories,
+    runInTransaction,
+    access,
+    clock,
+    webUrl: config.webUrl,
+  });
   const { trustProxy } = config;
 
   // The CLI polls about every 5 seconds while the user approves the sign-in.
@@ -79,6 +88,7 @@ export function createApp(dependencies: AppDependencies) {
     .use(projectRoutes({ auth, projects, trustProxy }))
     .use(environmentRoutes({ auth, environments, trustProxy }))
     .use(secretRoutes({ auth, secrets, trustProxy }))
+    .use(memberRoutes({ auth, members, trustProxy }))
     .use(auditRoutes({ auth, audit, trustProxy }));
 }
 

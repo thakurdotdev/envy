@@ -101,10 +101,18 @@ export function createProjectService(dependencies: {
         beforeId: page.cursor,
         limit: limit + 1,
       });
+      // Admins see how many people wait for keys, so the CLI can offer to grant them.
+      const adminProjectIds = rows
+        .filter((row) => row.role === "owner" || row.role === "admin")
+        .map((row) => row.id);
+      const pending = await repositories.members.countPending(adminProjectIds);
       return toPage(
         rows,
         limit,
-        (row) => toProjectDto(row, row.role),
+        (row) => ({
+          ...toProjectDto(row, row.role),
+          pendingMembers: adminProjectIds.includes(row.id) ? (pending.get(row.id) ?? 0) : null,
+        }),
         (row) => row.id,
       );
     },

@@ -5,6 +5,11 @@ import type { Logger } from "./logger.ts";
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
+/** The request path for logs, with invite tokens (which act like passwords) hidden. */
+export function pathForLogs(url: string): string {
+  return new URL(url).pathname.replace(/^\/v1\/invites\/[^/]+/, "/v1/invites/[redacted]");
+}
+
 /**
  * Request ids, one log line per request, and the single error handler that
  * gives every error the `{ "error": { "code", "message" } }` shape.
@@ -27,7 +32,7 @@ export function httpBasics(logger: Logger) {
       logger.info("request", {
         requestId,
         method: request.method,
-        path: new URL(request.url).pathname,
+        path: pathForLogs(request.url),
         status: set.status,
         durationMs: Math.round(performance.now() - requestStartedAt),
       });
@@ -69,7 +74,7 @@ export function httpBasics(logger: Logger) {
       if (code === "NOT_FOUND") {
         return respond(404, "ROUTE_NOT_FOUND", "There is no such API route.");
       }
-      logger.error("unexpected error", { path: new URL(request.url).pathname, error });
+      logger.error("unexpected error", { path: pathForLogs(request.url), error });
       return respond(500, "INTERNAL_ERROR", "Something went wrong on the server. Try again later.");
     });
 }

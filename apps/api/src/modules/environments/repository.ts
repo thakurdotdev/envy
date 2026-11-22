@@ -57,6 +57,21 @@ export function createEnvironmentRepository(executor: Executor) {
       return rows.map((row) => ({ ...row.environment, latestVersion: row.latestVersion ?? 0 }));
     },
 
+    /**
+     * Moves an environment to a new key version, only if it is still on
+     * `fromVersion`, so two rotations at once cannot both succeed.
+     */
+    async advanceKeyVersion(environmentId: string, fromVersion: number): Promise<boolean> {
+      const updated = await executor
+        .update(environments)
+        .set({ currentKeyVersion: fromVersion + 1 })
+        .where(
+          and(eq(environments.id, environmentId), eq(environments.currentKeyVersion, fromVersion)),
+        )
+        .returning({ id: environments.id });
+      return updated.length === 1;
+    },
+
     async addWrappedKeys(keys: NewWrappedKey[]): Promise<void> {
       if (keys.length > 0) {
         await executor.insert(environmentKeys).values(keys);

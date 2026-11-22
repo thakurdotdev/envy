@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import type { Database } from "../../db/client.ts";
+import type { Executor } from "../../db/executor.ts";
 import { users, type StoredKdfParams, type UserRow } from "../../db/schema.ts";
 
 export type GitHubProfile = {
@@ -17,7 +17,7 @@ export type UserKeyMaterial = {
   kdfParams: StoredKdfParams;
 };
 
-export function createUserRepository(database: Database) {
+export function createUserRepository(database: Executor) {
   return {
     /** Creates the user on first sign-in, or refreshes their GitHub details. */
     async upsertFromGitHub(profile: GitHubProfile): Promise<UserRow> {

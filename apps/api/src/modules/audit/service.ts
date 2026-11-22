@@ -11,9 +11,15 @@ export type AuditEvent = {
     | "project.renamed"
     | "project.deleted"
     | "environment.created"
+    | "environment.rotated"
     | "secrets.read"
-    | "secrets.pushed";
-  targetType: "project" | "environment";
+    | "secrets.pushed"
+    | "member.invited"
+    | "member.joined"
+    | "member.granted"
+    | "member.role_changed"
+    | "member.removed";
+  targetType: "project" | "environment" | "member";
   targetId: string;
   metadata?: Record<string, string | number | boolean | null>;
 };

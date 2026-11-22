@@ -81,8 +81,14 @@ export async function createProjectAsClient(testApp: TestApp, owner: TestUser, n
 }
 
 /** Fetches and unwraps the caller's environment key. */
-export async function fetchEnvKey(testApp: TestApp, user: TestUser, environmentId: string) {
-  const response = await testApp.request("GET", `/v1/environments/${environmentId}/key`, {
+export async function fetchEnvKey(
+  testApp: TestApp,
+  user: TestUser,
+  environmentId: string,
+  keyVersion?: number,
+) {
+  const query = keyVersion === undefined ? "" : `?keyVersion=${keyVersion}`;
+  const response = await testApp.request("GET", `/v1/environments/${environmentId}/key${query}`, {
     accessToken: user.accessToken,
   });
   const wrapped = await fromBase64Url(readField(response.body, "wrappedKey"));
@@ -96,17 +102,21 @@ export async function pushSecretsAsClient(
   secrets: Secrets,
   baseVersion: number,
 ) {
+  const keyResponse = await testApp.request("GET", `/v1/environments/${place.environmentId}/key`, {
+    accessToken: user.accessToken,
+  });
+  const keyVersion = readNumber(keyResponse.body, "keyVersion");
   const envKey = await fetchEnvKey(testApp, user, place.environmentId);
   const encrypted = await encryptSecrets(secrets, envKey, {
     ...place,
     version: baseVersion + 1,
-    keyVersion: 1,
+    keyVersion,
   });
   return testApp.request("POST", `/v1/environments/${place.environmentId}/secrets`, {
     accessToken: user.accessToken,
     body: {
       baseVersion,
-      keyVersion: 1,
+      keyVersion,
       ciphertext: await toBase64Url(encrypted.ciphertext),
       nonce: await toBase64Url(encrypted.nonce),
     },
@@ -128,7 +138,12 @@ export async function pullSecretsAsClient(
     },
   );
   const current = readObject(response.body, "current");
-  const envKey = await fetchEnvKey(testApp, user, place.environmentId);
+  const envKey = await fetchEnvKey(
+    testApp,
+    user,
+    place.environmentId,
+    readNumber(current, "keyVersion"),
+  );
   return decryptSecrets(
     {
       ciphertext: await fromBase64Url(readField(current, "ciphertext")),
@@ -164,4 +179,119 @@ export function readNumber(body: unknown, name: string): number {
     throw new Error(`The field "${name}" is not a number.`);
   }
   return value;
+}
+
+/** Lists members, failing the test if the call fails. */
+export async function listMembers(testApp: TestApp, user: TestUser, projectId: string) {
+  const response = await testApp.request("GET", `/v1/projects/${projectId}/members`, {
+    accessToken: user.accessToken,
+  });
+  return readItems(response.body).map((item) => ({
+    id: readField(item, "id"),
+    userId: readField(item, "userId"),
+    githubLogin: readField(item, "githubLogin"),
+    status: readField(item, "status"),
+    role: readField(item, "role"),
+    publicKey: readField(item, "publicKey"),
+  }));
+}
+
+type EnvironmentInfo = {
+  id: string;
+  name: string;
+  currentKeyVersion: number;
+  latestVersion: number;
+};
+
+export async function listEnvironmentInfo(
+  testApp: TestApp,
+  user: TestUser,
+  projectId: string,
+): Promise<EnvironmentInfo[]> {
+  const response = await testApp.request("GET", `/v1/projects/${projectId}/environments`, {
+    accessToken: user.accessToken,
+  });
+  return readItems(response.body).map((item) => ({
+    id: readField(item, "id"),
+    name: readField(item, "name"),
+    currentKeyVersion: readNumber(item, "currentKeyVersion"),
+    latestVersion: readNumber(item, "latestVersion"),
+  }));
+}
+
+/** The admin's client wraps each environment key for the pending member and sends them. */
+export async function grantAsClient(
+  testApp: TestApp,
+  admin: TestUser,
+  projectId: string,
+  member: { id: string; publicKey: string },
+) {
+  const memberPublicKey = await fromBase64Url(member.publicKey);
+  const wrappedKeys = [];
+  for (const environment of await listEnvironmentInfo(testApp, admin, projectId)) {
+    const envKey = await fetchEnvKey(testApp, admin, environment.id);
+    wrappedKeys.push({
+      environmentId: environment.id,
+      keyVersion: environment.currentKeyVersion,
+      wrappedKey: await toBase64Url(await wrapEnvKey(envKey, memberPublicKey)),
+    });
+  }
+  return testApp.request("POST", `/v1/members/${member.id}/grant`, {
+    accessToken: admin.accessToken,
+    body: { wrappedKeys },
+  });
+}
+
+/**
+ * The admin's client makes a new key for every environment, wraps it for
+ * everyone who stays, re-encrypts the latest secrets, and removes the member.
+ */
+export async function removeAsClient(
+  testApp: TestApp,
+  admin: TestUser,
+  projectId: string,
+  memberId: string,
+) {
+  const remaining = (await listMembers(testApp, admin, projectId)).filter(
+    (member) => member.id !== memberId && member.status === "active",
+  );
+  const rotations = [];
+  for (const environment of await listEnvironmentInfo(testApp, admin, projectId)) {
+    const newEnvKey = await generateEnvKey();
+    const newKeyVersion = environment.currentKeyVersion + 1;
+    const wrappedKeys = [];
+    for (const member of remaining) {
+      wrappedKeys.push({
+        userId: member.userId,
+        wrappedKey: await toBase64Url(
+          await wrapEnvKey(newEnvKey, await fromBase64Url(member.publicKey)),
+        ),
+      });
+    }
+    const rotation: Record<string, unknown> = {
+      environmentId: environment.id,
+      newKeyVersion,
+      wrappedKeys,
+      baseVersion: environment.latestVersion,
+    };
+    if (environment.latestVersion > 0) {
+      const latest = await pullSecretsAsClient(testApp, admin, {
+        projectId,
+        environmentId: environment.id,
+      });
+      const encrypted = await encryptSecrets(latest, newEnvKey, {
+        projectId,
+        environmentId: environment.id,
+        version: environment.latestVersion + 1,
+        keyVersion: newKeyVersion,
+      });
+      rotation["ciphertext"] = await toBase64Url(encrypted.ciphertext);
+      rotation["nonce"] = await toBase64Url(encrypted.nonce);
+    }
+    rotations.push(rotation);
+  }
+  return testApp.request("DELETE", `/v1/members/${memberId}`, {
+    accessToken: admin.accessToken,
+    body: { rotations },
+  });
 }
