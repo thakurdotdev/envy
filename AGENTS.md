@@ -71,6 +71,10 @@ apps. The CLI and web import only the API's `type App`, never its runtime code.
 | `bun run db:generate`  | Make a migration from `apps/api/src/db/schema.ts`                                                                                                                                                   |
 | `bun run db:migrate`   | Apply migrations (reads `DATABASE_URL`, see `apps/api/.env.example`)                                                                                                                                |
 
+CLI environment variables (for scripts and tests): `ENVY_API_URL`, `ENVY_ENV`,
+`ENVY_CONFIG_DIR`, `ENVY_KEYSTORE=file|keychain`, `ENVY_MASTER_PASSWORD`,
+`ENVY_NO_BROWSER`, `ENVY_DEBUG=1`. See ADR 0008.
+
 Never add a script called `check`: `bun check` would run it instead of the
 type checker. The all-in-one script is `verify`.
 
