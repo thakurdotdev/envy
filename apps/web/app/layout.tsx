@@ -48,7 +48,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
-          <Toaster />
+          {/* At the top, so toasts never cover the save bar at the bottom of the editor. */}
+          <Toaster position="top-center" />
         </ThemeProvider>
       </body>
     </html>

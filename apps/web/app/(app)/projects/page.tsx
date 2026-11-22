@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { AppShell, PageTitle } from "@/components/app-shell";
+import { ChevronRight, Plus } from "lucide-react";
+import { PageTitle } from "@/components/app-shell";
 import { EmptyState, LoadError, LoadingRows } from "@/components/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,36 +20,46 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useLoad } from "@/hooks/use-load";
+import { Spinner } from "@/components/ui/spinner";
+import { useDocumentTitle } from "@/hooks/use-document-title";
+import { forgetCached, useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
 import { createProject } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
 
-export default function HomePage() {
-  return (
-    <AppShell>
-      <Projects />
-    </AppShell>
-  );
-}
-
-function Projects() {
+export default function ProjectsPage() {
+  useDocumentTitle("Projects");
   const { state, reload } = useLoad(
     () => call((api) => api.v1.projects.get({ query: { limit: 100 } })),
     [],
+    { cacheKey: "projects" },
   );
   const [creating, setCreating] = useState(false);
 
   return (
     <>
-      <PageTitle title="Projects">
-        <Button onClick={() => setCreating(true)}>New project</Button>
+      <PageTitle
+        title="Projects"
+        description="Each project has its own environments, members and tokens."
+      >
+        {/* With no projects yet, the empty state below offers the same button. */}
+        {state.status === "ready" && state.data.items.length === 0 ? null : (
+          <Button onClick={() => setCreating(true)}>
+            <Plus /> New project
+          </Button>
+        )}
       </PageTitle>
       {state.status === "loading" ? <LoadingRows label="Loading projects" /> : null}
       {state.status === "error" ? <LoadError message={state.message} onRetry={reload} /> : null}
       {state.status === "ready" && state.data.items.length === 0 ? (
         <EmptyState title="No projects yet">
-          Create one here, or run <code>envy init</code> in a project folder.
+          <p>
+            Create one here, or run <code className="font-mono">envy init</code> in a project folder
+            to upload its .env files.
+          </p>
+          <Button className="mt-4" onClick={() => setCreating(true)}>
+            <Plus /> New project
+          </Button>
         </EmptyState>
       ) : null}
       {state.status === "ready" ? (
@@ -57,15 +68,23 @@ function Projects() {
             <li key={project.id}>
               <Link
                 href={`/project?id=${project.id}`}
-                className="block rounded-xl focus-visible:outline-2"
+                className="group block rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               >
-                <Card className="transition-colors hover:bg-muted/50">
+                <Card className="transition-colors group-hover:bg-muted/50">
                   <CardHeader>
-                    <CardTitle>{project.name}</CardTitle>
+                    <CardTitle className="flex items-center justify-between gap-2">
+                      <span className="truncate">{project.name}</span>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    </CardTitle>
                     <CardDescription className="flex gap-2">
                       <Badge variant="secondary">{project.role}</Badge>
                       {(project.pendingMembers ?? 0) > 0 ? (
-                        <Badge>{project.pendingMembers} waiting for access</Badge>
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+                        >
+                          {project.pendingMembers} waiting for access
+                        </Badge>
                       ) : null}
                     </CardDescription>
                   </CardHeader>
@@ -99,6 +118,7 @@ function NewProjectDialog({
     setError(undefined);
     try {
       const project = await createProject(keys, name.trim());
+      forgetCached("projects");
       toast.success(`Created ${project.name}`);
       router.push(`/project?id=${project.id}`);
     } catch (caught) {
@@ -108,7 +128,19 @@ function NewProjectDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (busy) {
+          return;
+        }
+        if (!next) {
+          setName("");
+          setError(undefined);
+        }
+        onOpenChange(next);
+      }}
+    >
       <DialogContent>
         <form onSubmit={(event) => void submit(event)} className="space-y-4">
           <DialogHeader>
@@ -123,6 +155,10 @@ function NewProjectDialog({
             <Input
               id="project-name"
               value={name}
+              placeholder="my-app"
+              maxLength={100}
+              autoComplete="off"
+              aria-invalid={error !== undefined}
               onChange={(event) => setName(event.target.value)}
               autoFocus
             />
@@ -134,6 +170,7 @@ function NewProjectDialog({
           </div>
           <DialogFooter>
             <Button type="submit" disabled={busy || name.trim() === ""}>
+              {busy ? <Spinner /> : null}
               {busy ? "Creating…" : "Create project"}
             </Button>
           </DialogFooter>

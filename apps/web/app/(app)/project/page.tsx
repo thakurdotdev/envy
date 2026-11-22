@@ -1,110 +1,126 @@
 "use client";
 
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
-import { AppShell, PageTitle } from "@/components/app-shell";
+import { Lock } from "lucide-react";
+import { Suspense, useCallback, useState } from "react";
+import { SectionTitle } from "@/components/app-shell";
 import { HistoryPanel } from "@/components/history-panel";
+import { ProjectFrame, type ProjectInfo } from "@/components/project-frame";
 import { SecretEditor } from "@/components/secret-editor";
 import { LoadError, LoadingRows } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLoad } from "@/hooks/use-load";
-import { call } from "@/lib/api";
+import { useUnsavedChangesWarning } from "@/hooks/use-unsaved-changes";
 import { listEnvironments } from "@/lib/envy";
 
 // IDs are not known when the site is built, so pages take them as ?id=.
 export default function ProjectPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<LoadingRows label="Loading project" />}>
-        <Project />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<LoadingRows label="Loading project" />}>
+      <ProjectFrame section="Variables">
+        {(project) => <Environments project={project} />}
+      </ProjectFrame>
+    </Suspense>
   );
 }
 
-function Project() {
-  const projectId = useSearchParams().get("id") ?? "";
-  // Bumped after a save or rollback, so the editor and history load again
-  // without re-mounting the tabs (which would jump back to the first one).
-  const [revision, setRevision] = useState(0);
-  const bumpRevision = () => setRevision((current) => current + 1);
-  const { state, reload } = useLoad(async () => {
-    const [project, environments] = await Promise.all([
-      call((api) => api.v1.projects({ id: projectId }).get()),
-      listEnvironments(projectId),
-    ]);
-    return { project, environments };
-  }, [projectId]);
+function Environments({ project }: { project: ProjectInfo }) {
+  const { state, reload } = useLoad(() => listEnvironments(project.id), [project.id], {
+    cacheKey: `environments:${project.id}`,
+  });
+  const [selected, setSelected] = useState<string | undefined>();
+  // Editors stay mounted once opened, so switching tabs keeps unsaved edits.
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  // Bumped after a save or rollback, so that environment loads again.
+  const [revisions, setRevisions] = useState<Record<string, number>>({});
+  useUnsavedChangesWarning(Object.values(dirty).some(Boolean));
+
+  const setDirtyFor = useCallback((environmentId: string, isDirty: boolean) => {
+    setDirty((current) =>
+      current[environmentId] === isDirty ? current : { ...current, [environmentId]: isDirty },
+    );
+  }, []);
 
   if (state.status === "loading") {
-    return <LoadingRows label="Loading project" />;
+    return <LoadingRows label="Loading environments" />;
   }
   if (state.status === "error") {
     return <LoadError message={state.message} onRetry={reload} />;
   }
-  const { project, environments } = state.data;
+  const environments = state.data;
   const canEdit = project.role !== "viewer";
-  const isAdmin = project.role === "owner" || project.role === "admin";
-  const firstTab =
+  const fallback =
     environments.find((environment) => environment.name === "development") ?? environments[0];
+  const current =
+    environments.find((environment) => environment.id === selected)?.id ?? fallback?.id;
+  const bump = (environmentId: string) =>
+    setRevisions((all) => ({ ...all, [environmentId]: (all[environmentId] ?? 0) + 1 }));
 
   return (
-    <>
-      <PageTitle title={project.name}>
-        <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/members?id=${project.id}`}>Members</Link>
-          </Button>
-          {isAdmin ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/audit?id=${project.id}`}>Audit log</Link>
-            </Button>
-          ) : null}
-          {isAdmin ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/tokens?id=${project.id}`}>Service tokens</Link>
-            </Button>
-          ) : null}
-        </div>
-      </PageTitle>
-      <Tabs defaultValue={firstTab?.id}>
+    <Tabs
+      value={current}
+      onValueChange={(environmentId) => {
+        if (current !== undefined) {
+          setOpened((all) => new Set(all).add(current));
+        }
+        setSelected(environmentId);
+      }}
+    >
+      <div className="-mx-4 overflow-x-auto px-4 pb-1">
         <TabsList aria-label="Environments">
           {environments.map((environment) => (
-            <TabsTrigger key={environment.id} value={environment.id}>
+            <TabsTrigger key={environment.id} value={environment.id} className="px-2.5">
+              {environment.isProtected ? (
+                <Lock aria-label="protected" className="text-muted-foreground" />
+              ) : null}
               {environment.name}
-              {environment.isProtected ? <Badge variant="destructive">protected</Badge> : null}
+              {dirty[environment.id] === true ? (
+                <span
+                  className="size-1.5 rounded-full bg-amber-500"
+                  role="img"
+                  aria-label="unsaved changes"
+                />
+              ) : null}
             </TabsTrigger>
           ))}
         </TabsList>
-        {environments.map((environment) => (
-          <TabsContent key={environment.id} value={environment.id} className="mt-4 space-y-8">
+      </div>
+      {environments
+        .filter((environment) => environment.id === current || opened.has(environment.id))
+        .map((environment) => (
+          <TabsContent
+            key={environment.id}
+            value={environment.id}
+            forceMount
+            className="mt-4 space-y-10 data-[state=inactive]:hidden"
+          >
             <section aria-label={`${environment.name} variables`}>
               <SecretEditor
-                key={`${environment.id}-${revision}`}
+                key={`${environment.id}-${revisions[environment.id] ?? 0}`}
                 projectId={project.id}
                 environment={environment}
                 canEdit={canEdit}
-                onSaved={bumpRevision}
+                isActive={environment.id === current}
+                onSaved={() => bump(environment.id)}
+                onDirtyChange={(isDirty) => setDirtyFor(environment.id, isDirty)}
               />
             </section>
             <section aria-labelledby={`history-${environment.id}`}>
-              <h2 id={`history-${environment.id}`} className="mb-3 text-lg font-semibold">
-                History
-              </h2>
+              <SectionTitle
+                id={`history-${environment.id}`}
+                title="History"
+                description="Every save is a new version. Compare one to see which names it changes."
+              />
               <HistoryPanel
-                revision={revision}
+                revision={revisions[environment.id] ?? 0}
                 projectId={project.id}
                 environment={environment}
                 canEdit={canEdit}
-                onChanged={bumpRevision}
+                onChanged={() => bump(environment.id)}
               />
             </section>
           </TabsContent>
         ))}
-      </Tabs>
-    </>
+    </Tabs>
   );
 }

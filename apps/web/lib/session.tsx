@@ -18,6 +18,7 @@ import {
   refreshAccessToken,
   signOut as apiSignOut,
 } from "./api";
+import { clearLoadCache } from "@/hooks/use-load";
 import { setUpKeys, unlockKeys, type StoredKeys, type UnlockedKeys } from "./envy";
 
 export type Profile = {
@@ -91,6 +92,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(() => {
     const keys = keysRef.current;
     keysRef.current = undefined;
+    // Project names, members and the like go too: nothing outlives the unlock.
+    clearLoadCache();
     if (keys !== undefined) {
       void clearKey(keys.privateKey);
     }

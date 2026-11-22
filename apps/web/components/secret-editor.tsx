@@ -23,6 +23,7 @@ import {
 } from "@/lib/env-rows";
 import { diffKeys, pullEnvironment, pushEnvironment, type EnvironmentSummary } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
+import { cn } from "@/lib/utils";
 import { EnvTable, type RowHandlers } from "./env-table";
 import { EnvToolbar, type EditorMode } from "./env-toolbar";
 import { RawEnvView } from "./raw-env-view";
@@ -36,12 +37,17 @@ export function SecretEditor({
   projectId,
   environment,
   canEdit,
+  isActive,
   onSaved,
+  onDirtyChange,
 }: {
   projectId: string;
   environment: EnvironmentSummary;
   canEdit: boolean;
+  /** Only the visible editor answers the save shortcut. */
+  isActive: boolean;
   onSaved: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const { keys } = useUnlocked();
   const { state, reload } = useLoad(
@@ -57,13 +63,48 @@ export function SecretEditor({
   const [confirming, setConfirming] = useState(false);
   const [conflict, setConflict] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  // A row just added with "Add": its name box gets the focus.
+  const [focusRowId, setFocusRowId] = useState<number | undefined>();
 
+  // Reset the rows only when new data arrives, not when a refresh starts.
+  const loaded = state.status === "ready" ? state.data : undefined;
   useEffect(() => {
-    if (state.status === "ready") {
-      setRows(toRows(state.data.secrets));
+    if (loaded !== undefined) {
+      setRows(toRows(loaded.secrets));
       setConflict(undefined);
     }
-  }, [state]);
+  }, [loaded]);
+
+  const saved = loaded?.secrets ?? {};
+  const edited = toSecrets(rows);
+  const diff = diffKeys(saved, edited);
+  const isDirty =
+    loaded !== undefined && diff.added.length + diff.changed.length + diff.removed.length > 0;
+  const count = Object.keys(edited).length;
+  const problem =
+    mode === "env" ? rawError : rows.map((row) => rowProblem(row, rows)).find(Boolean);
+  const canSave = canEdit && isDirty && problem === undefined && !saving;
+
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  // Ctrl+S / Cmd+S opens the save check, like saving a file.
+  useEffect(() => {
+    if (!isActive || !canEdit) {
+      return undefined;
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (canSave) {
+          setConfirming(true);
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isActive, canEdit, canSave]);
 
   if (state.status === "loading") {
     return <LoadingRows label={`Loading ${environment.name}`} />;
@@ -71,14 +112,6 @@ export function SecretEditor({
   if (state.status === "error") {
     return <LoadError message={state.message} onRetry={reload} />;
   }
-
-  const saved = state.data.secrets;
-  const edited = toSecrets(rows);
-  const diff = diffKeys(saved, edited);
-  const isDirty = diff.added.length + diff.changed.length + diff.removed.length > 0;
-  const count = Object.keys(edited).length;
-  const problem =
-    mode === "env" ? rawError : rows.map((row) => rowProblem(row, rows)).find(Boolean);
   const allRevealed = rows.length > 0 && rows.every((row) => row.revealed);
   const search = query.trim().toLowerCase();
   const visibleRows =
@@ -91,8 +124,11 @@ export function SecretEditor({
   }
 
   function addRow() {
+    const row = newRow("", "", true);
     setQuery("");
-    setRows((current) => [...current, newRow("", "", true)]);
+    setMode("table");
+    setRows((current) => [...current, row]);
+    setFocusRowId(row.id);
   }
 
   function remove(row: Row) {
@@ -199,7 +235,7 @@ export function SecretEditor({
     }
   }
 
-  async function save() {
+  async function save(message: string | undefined) {
     setSaving(true);
     try {
       const version = await pushEnvironment({
@@ -207,7 +243,8 @@ export function SecretEditor({
         projectId,
         environment,
         secrets: edited,
-        baseVersion: state.status === "ready" ? state.data.version : 0,
+        baseVersion: loaded?.version ?? 0,
+        ...(message === undefined ? {} : { message }),
       });
       toast.success(`Saved version ${version} of ${environment.name}`);
       onSaved();
@@ -320,6 +357,7 @@ export function SecretEditor({
             visibleRows={visibleRows}
             saved={saved}
             canEdit={canEdit}
+            focusRowId={focusRowId}
             handlers={handlers}
           />
           {search !== "" && visibleRows.length === 0 ? (
@@ -362,11 +400,26 @@ export function SecretEditor({
       ) : null}
 
       {canEdit && (rows.length > 0 || isDirty) ? (
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-          <span className="text-sm text-muted-foreground" aria-live="polite">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 border-t pt-3",
+            // While there is something to save, the bar stays in view on long lists.
+            isDirty && "sticky bottom-0 z-10 -mx-4 bg-background/95 px-4 pb-3 backdrop-blur",
+          )}
+        >
+          <span
+            className={cn(
+              "flex items-center gap-1.5 text-sm",
+              isDirty ? "font-medium text-foreground" : "text-muted-foreground",
+            )}
+            aria-live="polite"
+          >
+            {isDirty && problem === undefined ? (
+              <span className="size-2 rounded-full bg-amber-500" aria-hidden />
+            ) : null}
             {mode === "env" && rawError !== undefined
               ? "Fix the .env text above to save."
-              : (problem ?? (isDirty ? "Unsaved changes" : "All changes saved"))}
+              : (problem ?? (isDirty ? describeChanges(diff) : "All changes saved"))}
           </span>
           <Button
             variant="ghost"
@@ -379,10 +432,7 @@ export function SecretEditor({
           >
             Discard
           </Button>
-          <Button
-            disabled={!isDirty || problem !== undefined || saving}
-            onClick={() => setConfirming(true)}
-          >
+          <Button disabled={!canSave} onClick={() => setConfirming(true)} title="Save (Ctrl+S)">
             Save
           </Button>
         </div>
@@ -401,8 +451,18 @@ export function SecretEditor({
         onOpenChange={setConfirming}
         environment={environment}
         diff={diff}
-        onSave={() => void save()}
+        saving={saving}
+        onSave={(message) => void save(message)}
       />
     </div>
   );
+}
+
+function describeChanges(diff: { added: string[]; changed: string[]; removed: string[] }): string {
+  const parts = [
+    diff.added.length > 0 ? `${diff.added.length} added` : "",
+    diff.changed.length > 0 ? `${diff.changed.length} changed` : "",
+    diff.removed.length > 0 ? `${diff.removed.length} removed` : "",
+  ].filter((part) => part !== "");
+  return `Unsaved: ${parts.join(", ")}`;
 }

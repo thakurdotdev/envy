@@ -223,10 +223,9 @@ export async function removeMember(
   projectId: string,
   member: Member,
   everyone: Member[],
-): Promise<void> {
+): Promise<{ revokedTokens: Array<{ id: string; name: string; environmentName: string }> }> {
   if (member.status === "pending") {
-    await call((api) => api.v1.members({ id: member.id }).delete({ rotations: [] }));
-    return;
+    return call((api) => api.v1.members({ id: member.id }).delete({ rotations: [] }));
   }
   const staying = everyone.filter(
     (candidate) => candidate.id !== member.id && candidate.status === "active",
@@ -280,7 +279,8 @@ export async function removeMember(
     rotations.push(rotation);
     await clearKey(newEnvKey);
   }
-  await call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
+  // The answer lists the service tokens this member made, which were revoked with them.
+  return call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
 }
 
 export function diffKeys(before: Secrets, after: Secrets) {
@@ -322,6 +322,7 @@ export async function createServiceToken(
   projectId: string,
   environment: EnvironmentSummary,
   name: string,
+  expiresAt?: Date,
 ): Promise<string> {
   const tokenId = toHex(crypto.getRandomValues(new Uint8Array(24)));
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(tokenId));
@@ -333,6 +334,7 @@ export async function createServiceToken(
     tokenIdHash: toHex(new Uint8Array(digest)),
     publicKey: await toBase64Url(tokenKeys.publicKey),
     wrappedKey: await toBase64Url(await wrapEnvKey(envKey, tokenKeys.publicKey)),
+    ...(expiresAt === undefined ? {} : { expiresAt: expiresAt.toISOString() }),
   };
   await clearKey(envKey);
   await call((api) => api.v1.projects({ id: projectId }).tokens.post(body));

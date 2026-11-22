@@ -1,14 +1,14 @@
 "use client";
 
 import { fingerprint, fromBase64Url } from "@envy/crypto";
-import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { AppShell, PageTitle } from "@/components/app-shell";
+import { SectionTitle } from "@/components/app-shell";
+import { CopyButton } from "@/components/copy-button";
+import { isAdminRole, ProjectFrame, type ProjectInfo } from "@/components/project-frame";
 import { LoadError, LoadingRows } from "@/components/states";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -36,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useLoad } from "@/hooks/use-load";
+import { forgetCached, useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
 import { grantMember, removeMember, type Member } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
@@ -44,29 +45,32 @@ import { useUnlocked } from "@/lib/session";
 const ROLES = ["admin", "member", "viewer"] as const;
 type AssignableRole = (typeof ROLES)[number];
 
+const ROLE_HELP: Record<AssignableRole, string> = {
+  admin: "Can also invite, remove and manage tokens",
+  member: "Can read and change variables",
+  viewer: "Can only read variables",
+};
+
 function isAssignableRole(value: string): value is AssignableRole {
   return ROLES.some((role) => role === value);
 }
 
 export default function MembersPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<LoadingRows label="Loading members" />}>
-        <Members />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<LoadingRows label="Loading members" />}>
+      <ProjectFrame section="Members">{(project) => <Members project={project} />}</ProjectFrame>
+    </Suspense>
   );
 }
 
-function Members() {
-  const projectId = useSearchParams().get("id") ?? "";
-  const { state, reload } = useLoad(async () => {
-    const [project, members] = await Promise.all([
-      call((api) => api.v1.projects({ id: projectId }).get()),
-      call((api) => api.v1.projects({ id: projectId }).members.get()),
-    ]);
-    return { project, members: members.items };
-  }, [projectId]);
+function Members({ project }: { project: ProjectInfo }) {
+  const { profile } = useUnlocked();
+  const { state, reload } = useLoad(
+    () => call((api) => api.v1.projects({ id: project.id }).members.get()),
+    [project.id],
+    { cacheKey: `members:${project.id}` },
+  );
+  const isAdmin = isAdminRole(project.role);
 
   if (state.status === "loading") {
     return <LoadingRows label="Loading members" />;
@@ -74,19 +78,30 @@ function Members() {
   if (state.status === "error") {
     return <LoadError message={state.message} onRetry={reload} />;
   }
-  const { project, members } = state.data;
-  const isAdmin = project.role === "owner" || project.role === "admin";
+  // People waiting for access first: giving it to them is the usual next step.
+  const members = state.data.items.toSorted(
+    (first, second) => Number(second.status === "pending") - Number(first.status === "pending"),
+  );
+  const pendingCount = members.filter((member) => member.status === "pending").length;
 
   return (
-    <>
-      <PageTitle title={`${project.name}: members`} />
-      <div className="space-y-8">
+    <div className="space-y-10">
+      <section aria-labelledby="members-heading">
+        <SectionTitle
+          id="members-heading"
+          title="Members"
+          description={
+            pendingCount > 0 && isAdmin
+              ? `${pendingCount} waiting for you to give them access. Check their key fingerprint first.`
+              : "Compare key fingerprints with teammates in person or on a call: if they match, nobody (not even the server) swapped a key."
+          }
+        />
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Member</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead>Key fingerprint</TableHead>
+              <TableHead className="hidden md:table-cell">Key fingerprint</TableHead>
               <TableHead>
                 <span className="sr-only">Actions</span>
               </TableHead>
@@ -99,19 +114,16 @@ function Members() {
                 member={member}
                 everyone={members}
                 projectId={project.id}
+                isYou={member.userId === profile.id}
                 canManage={isAdmin && member.role !== "owner"}
                 onChanged={reload}
               />
             ))}
           </TableBody>
         </Table>
-        <p className="text-sm text-muted-foreground">
-          Compare fingerprints with your teammates in person or on a call. If they match, nobody
-          (not even the server) swapped their key.
-        </p>
-        {isAdmin ? <InviteForm projectId={project.id} /> : null}
-      </div>
-    </>
+      </section>
+      {isAdmin ? <InviteForm projectId={project.id} onInvited={reload} /> : null}
+    </div>
   );
 }
 
@@ -131,12 +143,14 @@ function MemberRow({
   member,
   everyone,
   projectId,
+  isYou,
   canManage,
   onChanged,
 }: {
   member: Member;
   everyone: Member[];
   projectId: string;
+  isYou: boolean;
   canManage: boolean;
   onChanged: () => void;
 }) {
@@ -144,120 +158,169 @@ function MemberRow({
   const code = useFingerprint(member.publicKey);
   const [confirm, setConfirm] = useState<"grant" | "remove" | undefined>();
   const [busy, setBusy] = useState(false);
+  const who = `@${member.githubLogin}`;
 
-  async function run(action: () => Promise<void>, success: string) {
+  async function run(action: () => Promise<void>) {
     setBusy(true);
     try {
       await action();
-      toast.success(success);
+      // Key versions change on removal, and access on grant.
+      forgetCached(`environments:${projectId}`);
+      setConfirm(undefined);
       onChanged();
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
       setBusy(false);
-      setConfirm(undefined);
     }
   }
 
   async function changeRole(role: string) {
-    if (!isAssignableRole(role)) {
+    if (!isAssignableRole(role) || role === member.role) {
       return;
     }
     await run(async () => {
       await call((api) => api.v1.members({ id: member.id }).patch({ role }));
-    }, `@${member.githubLogin} is now ${role}`);
+      toast.success(`${who} is now ${role}`);
+    });
   }
+
+  const grant = () =>
+    run(async () => {
+      await grantMember(keys, projectId, member);
+      toast.success(`${who} can now read every environment`);
+    });
+  const remove = () =>
+    run(async () => {
+      const { revokedTokens } = await removeMember(keys, projectId, member, everyone);
+      toast.success(`Removed ${who} and changed every environment key`);
+      if (revokedTokens.length > 0) {
+        toast.warning(`Revoked the service tokens ${who} made`, {
+          description: `${revokedTokens.map((token) => `"${token.name}" (${token.environmentName})`).join(", ")}. Make new ones for your CI.`,
+          duration: 15_000,
+        });
+      }
+    });
 
   return (
     <TableRow>
       <TableCell>
-        <div className="font-medium">@{member.githubLogin}</div>
+        <div className="font-medium">
+          {who}
+          {isYou ? (
+            <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>
+          ) : null}
+        </div>
         <div className="text-sm text-muted-foreground">{member.email}</div>
+        {/* On narrow screens the fingerprint sits here instead of in its own column. */}
+        <div className="mt-1 font-mono text-xs text-muted-foreground md:hidden">{code}</div>
       </TableCell>
       <TableCell>
-        {canManage ? (
-          <Select
-            value={member.role}
-            onValueChange={(role) => void changeRole(role)}
-            disabled={busy}
-          >
-            <SelectTrigger aria-label={`Role of @${member.githubLogin}`} className="w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ROLES.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {role}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Badge variant="secondary">{member.role}</Badge>
-        )}
-        {member.status === "pending" ? <Badge className="ml-2">waiting for keys</Badge> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Select
+              value={member.role}
+              onValueChange={(role) => void changeRole(role)}
+              disabled={busy}
+            >
+              <SelectTrigger aria-label={`Role of ${who}`} className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLES.map((role) => (
+                  <SelectItem key={role} value={role} title={ROLE_HELP[role]}>
+                    {role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Badge variant="secondary">{member.role}</Badge>
+          )}
+          {member.status === "pending" ? (
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+            >
+              waiting for access
+            </Badge>
+          ) : null}
+        </div>
       </TableCell>
-      <TableCell className="font-mono text-sm">{code}</TableCell>
-      <TableCell className="space-x-2 text-right">
-        {canManage && member.status === "pending" ? (
-          <Button size="sm" disabled={busy} onClick={() => setConfirm("grant")}>
-            Grant access
-          </Button>
-        ) : null}
-        {canManage ? (
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={busy}
-            onClick={() => setConfirm("remove")}
-          >
-            Remove
-          </Button>
-        ) : null}
+      <TableCell className="hidden font-mono text-sm whitespace-nowrap md:table-cell">
+        {code}
+      </TableCell>
+      <TableCell>
+        <div className="flex justify-end gap-2">
+          {canManage && member.status === "pending" ? (
+            <Button size="sm" disabled={busy} onClick={() => setConfirm("grant")}>
+              Give access
+            </Button>
+          ) : null}
+          {canManage ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={busy}
+              onClick={() => setConfirm("remove")}
+            >
+              Remove
+            </Button>
+          ) : null}
+        </div>
       </TableCell>
       <AlertDialog
         open={confirm !== undefined}
-        onOpenChange={(open) => setConfirm(open ? confirm : undefined)}
+        onOpenChange={(open) => (busy || open ? undefined : setConfirm(undefined))}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirm === "grant"
-                ? `Give @${member.githubLogin} access?`
-                : `Remove @${member.githubLogin}?`}
+              {confirm === "grant" ? `Give ${who} access?` : `Remove ${who}?`}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               {confirm === "grant" ? (
                 <div className="space-y-2">
-                  <p>Ask @{member.githubLogin} to read you their fingerprint. It must be:</p>
-                  <p className="font-mono text-base text-foreground">{code}</p>
+                  <p>
+                    Ask {who} to read you the fingerprint shown when they accepted the invite. It
+                    must be exactly:
+                  </p>
+                  <p className="rounded-md border bg-muted px-3 py-2 text-center font-mono text-base tracking-wider text-foreground">
+                    {code}
+                  </p>
+                  <p>If it is different, do not continue: someone may have swapped their key.</p>
                 </div>
               ) : (
-                <p>
-                  Every environment gets a new key that only the remaining members can open. They
-                  may still have copies of old values, so change the real credentials (database
-                  passwords, API keys) too.
-                </p>
+                <div className="space-y-2">
+                  <p>
+                    Every environment gets a new key that only the remaining members can open.
+                    Service tokens {who} made are revoked.
+                  </p>
+                  <p>
+                    They may still have copies of old values, so change the real credentials
+                    (database passwords, API keys) too.
+                  </p>
+                </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() =>
-                void (confirm === "grant"
-                  ? run(
-                      () => grantMember(keys, projectId, member),
-                      `@${member.githubLogin} can now read every environment`,
-                    )
-                  : run(
-                      () => removeMember(keys, projectId, member, everyone),
-                      `Removed @${member.githubLogin} and changed every environment key`,
-                    ))
-              }
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <Button
+              variant={confirm === "remove" ? "destructive" : "default"}
+              disabled={busy}
+              onClick={() => void (confirm === "grant" ? grant() : remove())}
             >
-              {confirm === "grant" ? "It matches, give access" : "Remove and change keys"}
-            </AlertDialogAction>
+              {busy ? <Spinner /> : null}
+              {confirm === "grant"
+                ? busy
+                  ? "Giving access…"
+                  : "It matches, give access"
+                : busy
+                  ? "Changing keys…"
+                  : "Remove and change keys"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -265,10 +328,10 @@ function MemberRow({
   );
 }
 
-function InviteForm({ projectId }: { projectId: string }) {
+function InviteForm({ projectId, onInvited }: { projectId: string; onInvited: () => void }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AssignableRole>("member");
-  const [link, setLink] = useState<string | undefined>();
+  const [invite, setInvite] = useState<{ url: string; email: string } | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
 
@@ -277,11 +340,12 @@ function InviteForm({ projectId }: { projectId: string }) {
     setBusy(true);
     setError(undefined);
     try {
-      const invite = await call((api) =>
-        api.v1.projects({ id: projectId }).members.post({ email, role }),
+      const created = await call((api) =>
+        api.v1.projects({ id: projectId }).members.post({ email: email.trim(), role }),
       );
-      setLink(invite.url);
+      setInvite({ url: created.url, email: created.email });
       setEmail("");
+      onInvited();
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -294,7 +358,8 @@ function InviteForm({ projectId }: { projectId: string }) {
       <CardHeader>
         <CardTitle>Invite someone</CardTitle>
         <CardDescription>
-          The link works once, for 7 days, and only for the GitHub account with this email.
+          You get a link to send them. It works once, for 7 days, and only for the GitHub account
+          with this email.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -304,8 +369,12 @@ function InviteForm({ projectId }: { projectId: string }) {
             <Input
               id="invite-email"
               type="email"
+              placeholder="teammate@example.com"
+              autoComplete="off"
               required
               value={email}
+              aria-invalid={error !== undefined}
+              aria-describedby={error === undefined ? undefined : "invite-error"}
               onChange={(event) => setEmail(event.target.value)}
             />
           </div>
@@ -320,38 +389,42 @@ function InviteForm({ projectId }: { projectId: string }) {
               </SelectTrigger>
               <SelectContent>
                 {ROLES.map((option) => (
-                  <SelectItem key={option} value={option}>
+                  <SelectItem key={option} value={option} title={ROLE_HELP[option]}>
                     {option}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <Button type="submit" disabled={busy || email === ""}>
+          <Button type="submit" disabled={busy || email.trim() === ""}>
+            {busy ? <Spinner /> : null}
             {busy ? "Inviting…" : "Invite"}
           </Button>
         </form>
+        <p className="text-xs text-muted-foreground">{ROLE_HELP[role]}.</p>
         {error === undefined ? null : (
-          <p role="alert" className="text-sm text-destructive">
+          <p id="invite-error" role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
-        {link === undefined ? null : (
-          <div className="flex gap-2" aria-live="polite">
-            <Input
-              readOnly
-              value={link}
-              aria-label="Invite link"
-              onFocus={(event) => event.target.select()}
-            />
-            <Button
-              variant="outline"
-              onClick={() =>
-                void navigator.clipboard.writeText(link).then(() => toast.success("Link copied"))
-              }
-            >
-              Copy link
-            </Button>
+        {invite === undefined ? null : (
+          <div className="space-y-2 rounded-lg border bg-muted/40 p-3" aria-live="polite">
+            <p className="text-sm">
+              Send this link to <span className="font-medium">{invite.email}</span>. When they
+              accept, they show up above as waiting for access.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={invite.url}
+                aria-label="Invite link"
+                className="font-mono text-xs"
+                onFocus={(event) => event.target.select()}
+              />
+              <CopyButton text={invite.url} label="invite link">
+                Copy link
+              </CopyButton>
+            </div>
           </div>
         )}
       </CardContent>

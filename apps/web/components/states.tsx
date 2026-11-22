@@ -31,7 +31,7 @@ export function LoadError({ message, onRetry }: { message: string; onRetry: () =
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed py-10 text-center">
+    <div className="rounded-lg border border-dashed px-4 py-10 text-center">
       <p className="font-medium">{title}</p>
       {children === undefined ? null : (
         <div className="mt-2 text-sm text-muted-foreground">{children}</div>
