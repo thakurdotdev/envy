@@ -22,11 +22,18 @@ export type AuthRateLimiters = {
 type AuthRoutesDependencies = {
   auth: AuthService;
   authenticate: Authenticate;
+  writeLimiter: RateLimiter;
   config: Pick<Config, "environment" | "webUrl" | "trustProxy">;
   rateLimiters: AuthRateLimiters;
 };
 
-export function authRoutes({ auth, authenticate, config, rateLimiters }: AuthRoutesDependencies) {
+export function authRoutes({
+  auth,
+  authenticate,
+  writeLimiter,
+  config,
+  rateLimiters,
+}: AuthRoutesDependencies) {
   const secure = config.environment === "production";
   const refreshCookie = {
     httpOnly: true,
@@ -122,7 +129,7 @@ export function authRoutes({ auth, authenticate, config, rateLimiters }: AuthRou
         { body: RefreshBody, beforeHandle: limit(rateLimiters.refresh, "refresh") },
       )
       // Everything below needs a signed-in user.
-      .use(authGuard(authenticate, config.trustProxy))
+      .use(authGuard(authenticate, config.trustProxy, writeLimiter))
       .post("/v1/auth/logout", async ({ actor, cookie, set }) => {
         await auth.logout(requireUser(actor));
         cookie[REFRESH_COOKIE]?.set({ value: "", ...refreshCookie, ...expired });

@@ -4,6 +4,7 @@ import type { Config } from "./config.ts";
 import type { Database } from "./db/client.ts";
 import type { Clock } from "./lib/clock.ts";
 import { httpBasics } from "./lib/http.ts";
+import { securityHeaders } from "./lib/security-headers.ts";
 import type { Logger } from "./lib/logger.ts";
 import { createRateLimiter } from "./lib/rate-limit.ts";
 import type { GitHubClient } from "./modules/auth/github.ts";
@@ -87,19 +88,22 @@ export function createApp(dependencies: AppDependencies) {
     webLogin: createRateLimiter({ limit: 20, windowMs: MINUTE_MS }, clock),
     refresh: createRateLimiter({ limit: 30, windowMs: MINUTE_MS }, clock),
   };
+  // Every change counts per IP and per user or token, on top of the auth limits.
+  const writeLimiter = createRateLimiter({ limit: 120, windowMs: MINUTE_MS }, clock);
 
   return new Elysia()
-    .use(httpBasics(logger))
+    .use(httpBasics(logger, { writeLimiter, trustProxy: config.trustProxy }))
+    .use(securityHeaders(config.environment === "production"))
     .use(cors({ origin: config.webUrl, credentials: true }))
     .get("/health", () => ({ status: "ok" as const }))
-    .use(authRoutes({ auth, authenticate, config, rateLimiters }))
-    .use(userRoutes({ authenticate, users, trustProxy }))
-    .use(projectRoutes({ authenticate, projects, trustProxy }))
-    .use(environmentRoutes({ authenticate, environments, trustProxy }))
-    .use(secretRoutes({ authenticate, secrets, trustProxy }))
-    .use(memberRoutes({ authenticate, members, trustProxy }))
-    .use(tokenRoutes({ authenticate, tokens, trustProxy }))
-    .use(auditRoutes({ authenticate, audit, trustProxy }));
+    .use(authRoutes({ auth, authenticate, writeLimiter, config, rateLimiters }))
+    .use(userRoutes({ authenticate, users, trustProxy, writeLimiter }))
+    .use(projectRoutes({ authenticate, projects, trustProxy, writeLimiter }))
+    .use(environmentRoutes({ authenticate, environments, trustProxy, writeLimiter }))
+    .use(secretRoutes({ authenticate, secrets, trustProxy, writeLimiter }))
+    .use(memberRoutes({ authenticate, members, trustProxy, writeLimiter }))
+    .use(tokenRoutes({ authenticate, tokens, trustProxy, writeLimiter }))
+    .use(auditRoutes({ authenticate, audit, trustProxy, writeLimiter }));
 }
 
 /** The API's type. The CLI and web import only this, through Eden Treaty. */

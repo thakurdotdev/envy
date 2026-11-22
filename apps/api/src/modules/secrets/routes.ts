@@ -1,3 +1,4 @@
+import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { EnvironmentIdParams, PushSecretsBody, SecretsQuery, VersionsQuery } from "./schema.ts";
@@ -7,10 +8,11 @@ export function secretRoutes(dependencies: {
   authenticate: Authenticate;
   secrets: SecretService;
   trustProxy: boolean;
+  writeLimiter: RateLimiter;
 }) {
-  const { authenticate, secrets, trustProxy } = dependencies;
+  const { authenticate, secrets, trustProxy, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy))
+    .use(authGuard(authenticate, trustProxy, writeLimiter))
     .get(
       "/v1/environments/:id/secrets",
       ({ context, params, query }) => secrets.getSecrets(context, params.id, query.version),

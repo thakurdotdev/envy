@@ -1,3 +1,4 @@
+import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { IdCursorQuery } from "../../lib/pagination.ts";
@@ -8,10 +9,11 @@ export function projectRoutes(dependencies: {
   authenticate: Authenticate;
   projects: ProjectService;
   trustProxy: boolean;
+  writeLimiter: RateLimiter;
 }) {
-  const { authenticate, projects, trustProxy } = dependencies;
+  const { authenticate, projects, trustProxy, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy))
+    .use(authGuard(authenticate, trustProxy, writeLimiter))
     .get("/v1/projects", ({ context, query }) => projects.listProjects(context, query), {
       query: IdCursorQuery,
     })

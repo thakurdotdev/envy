@@ -1,3 +1,4 @@
+import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { RotationSchema } from "../members/schema.ts";
@@ -9,10 +10,11 @@ export function environmentRoutes(dependencies: {
   authenticate: Authenticate;
   environments: EnvironmentService;
   trustProxy: boolean;
+  writeLimiter: RateLimiter;
 }) {
-  const { authenticate, environments, trustProxy } = dependencies;
+  const { authenticate, environments, trustProxy, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy))
+    .use(authGuard(authenticate, trustProxy, writeLimiter))
     .get(
       "/v1/projects/:id/environments",
       ({ context, params }) => environments.listEnvironments(context, params.id),
