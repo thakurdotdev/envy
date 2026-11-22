@@ -4,17 +4,17 @@
 
 ## Progress
 
-| Phase                                          | Status                            |
-| ---------------------------------------------- | --------------------------------- |
-| Phase 0 — Foundation                           | Done (CI and macOS spike pending) |
-| Phase 1 — Crypto package                       | Not started                       |
-| Phase 2 — API core: auth and users             | Not started                       |
-| Phase 3 — API: projects, environments, secrets | Not started                       |
-| Phase 4 — CLI core                             | Not started                       |
-| Phase 5 — Teams and access                     | Not started                       |
-| Phase 6 — Web dashboard                        | Not started                       |
-| Phase 7 — CI tokens and polish                 | Not started                       |
-| Phase 8 — Hardening and release                | Not started                       |
+| Phase                                          | Status                     |
+| ---------------------------------------------- | -------------------------- |
+| Phase 0 — Foundation                           | Done (macOS spike pending) |
+| Phase 1 — Crypto package                       | Not started                |
+| Phase 2 — API core: auth and users             | Not started                |
+| Phase 3 — API: projects, environments, secrets | Not started                |
+| Phase 4 — CLI core                             | Not started                |
+| Phase 5 — Teams and access                     | Not started                |
+| Phase 6 — Web dashboard                        | Not started                |
+| Phase 7 — CI tokens and polish                 | Not started                |
+| Phase 8 — Hardening and release                | Not started                |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
 
@@ -375,7 +375,7 @@ Changed from the plan (each has an ADR):
 Open questions:
 
 - macOS check of the spike (ADR 0002) needs a Mac.
-- CI has not run yet; it runs on the first push.
+- CI passed on the first run (PR #1).
 
 ### Phase 1 — Crypto package
 
