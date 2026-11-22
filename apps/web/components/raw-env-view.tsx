@@ -23,7 +23,7 @@ export function RawEnvView({
       <Textarea
         aria-label=".env contents"
         aria-invalid={error !== undefined}
-        className="min-h-48 font-mono text-[13px] leading-relaxed"
+        className="min-h-48 font-mono text-sm leading-relaxed"
         rows={Math.min(20, Math.max(8, text.split("\n").length + 1))}
         placeholder={PLACEHOLDER}
         value={text}

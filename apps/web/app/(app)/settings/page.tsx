@@ -3,8 +3,10 @@
 import { Monitor, Terminal } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PageTitle } from "@/components/app-shell";
+import { PageHeader } from "@/components/page-header";
 import { LoadError, LoadingRows } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
+import { TableFrame } from "@/components/table-frame";
 import { TimeAgo } from "@/components/time-ago";
 import {
   AlertDialog,
@@ -15,7 +17,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -57,55 +58,59 @@ export default function DevicesPage() {
 
   return (
     <>
-      <PageTitle
+      <PageHeader
         title="Signed-in devices"
         description="Every browser and CLI signed in to your account. Sign out any you do not recognise, or a lost laptop."
       />
       {state.status === "loading" ? <LoadingRows label="Loading devices" /> : null}
       {state.status === "error" ? <LoadError message={state.message} onRetry={reload} /> : null}
       {state.status === "ready" ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Device</TableHead>
-              <TableHead>Last used</TableHead>
-              <TableHead>Signed in</TableHead>
-              <TableHead>
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {state.data.items.map((device) => (
-              <TableRow key={device.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {device.client === "cli" ? (
-                      <Terminal className="size-4 text-muted-foreground" aria-label="CLI" />
-                    ) : (
-                      <Monitor className="size-4 text-muted-foreground" aria-label="Browser" />
-                    )}
-                    <span className="font-medium">{device.deviceName}</span>
-                    {device.isCurrent ? <Badge variant="secondary">this browser</Badge> : null}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <TimeAgo value={device.lastUsedAt} />
-                </TableCell>
-                <TableCell>
-                  <TimeAgo value={device.createdAt} />
-                </TableCell>
-                <TableCell className="text-right">
-                  {device.isCurrent ? null : (
-                    <Button variant="outline" size="sm" onClick={() => setSigningOut(device)}>
-                      Sign out
-                    </Button>
-                  )}
-                </TableCell>
+        <TableFrame>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Device</TableHead>
+                <TableHead>Last used</TableHead>
+                <TableHead>Signed in</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {state.data.items.map((device) => (
+                <TableRow key={device.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {device.client === "cli" ? (
+                        <Terminal className="size-4 text-muted-foreground" aria-label="CLI" />
+                      ) : (
+                        <Monitor className="size-4 text-muted-foreground" aria-label="Browser" />
+                      )}
+                      <span className="font-medium">{device.deviceName}</span>
+                      {device.isCurrent ? (
+                        <StatusBadge tone="success">this browser</StatusBadge>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <TimeAgo value={device.lastUsedAt} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <TimeAgo value={device.createdAt} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {device.isCurrent ? null : (
+                      <Button variant="outline" size="sm" onClick={() => setSigningOut(device)}>
+                        Sign out
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableFrame>
       ) : null}
       <AlertDialog
         open={signingOut !== undefined}
@@ -128,7 +133,7 @@ export default function DevicesPage() {
               }
             >
               {busy ? <Spinner /> : null}
-              {busy ? "Signing out…" : "Sign out device"}
+              Sign out device
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

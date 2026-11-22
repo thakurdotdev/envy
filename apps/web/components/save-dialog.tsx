@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import type { EnvironmentSummary } from "@/lib/envy";
+import { DiffLine, diffLines } from "./diff-line";
 
 /**
  * Shows which names a save adds, changes and removes, before it happens.
@@ -38,15 +39,7 @@ export function SaveDialog({
   onSave: (message: string | undefined) => void;
 }) {
   const [message, setMessage] = useState("");
-  const lines = [
-    ...diff.added.map((key) => ({
-      key,
-      mark: "+",
-      tone: "text-emerald-600 dark:text-emerald-400",
-    })),
-    ...diff.changed.map((key) => ({ key, mark: "~", tone: "text-amber-600 dark:text-amber-300" })),
-    ...diff.removed.map((key) => ({ key, mark: "−", tone: "text-destructive" })),
-  ];
+  const lines = diffLines(diff);
   const note = message.trim();
 
   return (
@@ -83,12 +76,10 @@ export function SaveDialog({
                 </p>
                 <ul
                   aria-label="Changes"
-                  className="max-h-60 overflow-y-auto rounded-lg border p-2 font-mono text-[13px]"
+                  className="max-h-60 overflow-y-auto rounded-lg border p-2 font-mono text-sm"
                 >
                   {lines.map((line) => (
-                    <li key={line.key} className={line.tone}>
-                      {line.mark} {line.key}
-                    </li>
+                    <DiffLine key={line.key} name={line.key} kind={line.kind} />
                   ))}
                 </ul>
               </div>
@@ -111,7 +102,7 @@ export function SaveDialog({
             <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
             <Button type="submit" disabled={saving} autoFocus>
               {saving ? <Spinner /> : null}
-              {saving ? "Saving…" : "Save new version"}
+              Save new version
             </Button>
           </AlertDialogFooter>
         </form>

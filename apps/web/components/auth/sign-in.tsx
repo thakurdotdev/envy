@@ -1,6 +1,7 @@
 import { LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { signInUrl } from "@/lib/api";
+import { InlineCode } from "../inline-code";
 import { AuthLayout } from "./auth-layout";
 
 export function SignIn() {
@@ -10,9 +11,7 @@ export function SignIn() {
       description="Use your GitHub account. New here? Signing in creates your account."
       footer={
         <>
-          Prefer the terminal? Run{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]">envy login</code>
-          .{" "}
+          Prefer the terminal? Run <InlineCode>envy login</InlineCode>.{" "}
           <a href="/docs" className="underline underline-offset-4">
             Read the docs
           </a>
@@ -24,8 +23,8 @@ export function SignIn() {
           <GitHubMark /> Sign in with GitHub
         </a>
       </Button>
-      <div className="mt-6 flex gap-3 rounded-lg bg-muted/60 p-3 text-sm text-muted-foreground">
-        <LockKeyhole className="mt-0.5 size-4 shrink-0" />
+      <div className="mt-6 flex gap-3 rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+        <LockKeyhole className="mt-0.5 size-4 shrink-0 text-foreground" />
         <p>
           Your secrets are encrypted in this browser before anything is sent. The server never sees
           them.

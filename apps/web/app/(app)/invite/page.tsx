@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { LoadingRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Card,
   CardContent,
@@ -64,7 +65,7 @@ function AcceptInvite() {
   }
 
   return (
-    <Card className="mx-auto max-w-md">
+    <Card className="mx-auto mt-8 max-w-md">
       <CardHeader>
         <CardTitle>
           {result === undefined ? "Join a project" : `You joined ${result.projectName}`}
@@ -81,7 +82,9 @@ function AcceptInvite() {
             <p className="text-sm">
               Your key fingerprint. Read it to the admin so they know the key is really yours:
             </p>
-            <p className="rounded-md border bg-muted p-3 font-mono">{result.fingerprint}</p>
+            <p className="rounded-md bg-code p-3 text-center font-mono tracking-wider text-code-foreground">
+              {result.fingerprint}
+            </p>
           </>
         )}
         {error === undefined ? null : (
@@ -93,7 +96,8 @@ function AcceptInvite() {
       <CardFooter>
         {result === undefined ? (
           <Button onClick={() => void accept()} disabled={busy || token === ""}>
-            {busy ? "Joining…" : "Accept invite"}
+            {busy ? <Spinner /> : null}
+            Accept invite
           </Button>
         ) : (
           <Button asChild variant="outline">

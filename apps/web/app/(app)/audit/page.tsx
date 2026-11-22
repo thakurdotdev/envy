@@ -1,9 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { SectionTitle } from "@/components/app-shell";
+import { SectionHeader } from "@/components/page-header";
 import { ProjectFrame, type ProjectInfo } from "@/components/project-frame";
 import { EmptyState, LoadError, LoadingRows } from "@/components/states";
+import { TableFrame } from "@/components/table-frame";
 import { TimeAgo } from "@/components/time-ago";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -107,10 +108,10 @@ function describeAction(item: AuditItem): { label: string; details: string } {
   return { label: known.label, details: known.describe?.(metadata) ?? "" };
 }
 
-function describeActor(item: AuditItem): string {
+function describeActor(item: AuditItem): string | undefined {
   // An API from before names were added sends no actorName at all.
   if (item.actorName === undefined) {
-    return "—";
+    return undefined;
   }
   return item.actorName ?? "a deleted account";
 }
@@ -154,53 +155,56 @@ function AuditLog({ project }: { project: ProjectInfo }) {
 
   return (
     <section aria-labelledby="audit-heading">
-      <SectionTitle
+      <SectionHeader
         id="audit-heading"
         title="Audit log"
         description="Who read or changed what, newest first. Values are never recorded."
       />
       {items.length === 0 ? <EmptyState title="Nothing has happened yet" /> : null}
       {items.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>When</TableHead>
-              <TableHead>Who</TableHead>
-              <TableHead>What</TableHead>
-              <TableHead>From</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((item) => {
-              const { label, details } = describeAction(item);
-              return (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <TimeAgo value={item.createdAt} />
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {describeActor(item)}
-                    {item.actorType === "token" ? (
-                      <span className="ml-1 text-xs text-muted-foreground">(token)</span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-medium">{label}</span>
-                    {details === "" ? null : (
-                      <span className="ml-1.5 text-muted-foreground">{details}</span>
-                    )}
-                  </TableCell>
-                  <TableCell
-                    className="text-sm whitespace-nowrap text-muted-foreground"
-                    title={item.userAgent ?? undefined}
-                  >
-                    {item.ip ?? ""}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <TableFrame>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Who</TableHead>
+                <TableHead>What</TableHead>
+                <TableHead>From</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => {
+                const { label, details } = describeAction(item);
+                const actor = describeActor(item);
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-muted-foreground">
+                      <TimeAgo value={item.createdAt} />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {actor ?? <span className="text-muted-foreground">None</span>}
+                      {item.actorType === "token" ? (
+                        <span className="ml-1 text-xs text-muted-foreground">(token)</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="min-w-56 whitespace-normal">
+                      <span className="font-medium">{label}</span>
+                      {details === "" ? null : (
+                        <span className="ml-1.5 text-muted-foreground">{details}</span>
+                      )}
+                    </TableCell>
+                    <TableCell
+                      className="font-mono text-xs whitespace-nowrap text-muted-foreground"
+                      title={item.userAgent ?? undefined}
+                    >
+                      {item.ip ?? ""}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableFrame>
       ) : null}
       {error === undefined ? null : (
         <p role="alert" className="mt-3 text-sm text-destructive">

@@ -43,7 +43,7 @@ export function EnvToolbar({
           </TabsTrigger>
         </TabsList>
       </Tabs>
-      <span className="text-sm text-muted-foreground">
+      <span className="text-sm text-muted-foreground tabular-nums">
         {count} {count === 1 ? "variable" : "variables"}
       </span>
       <div className="ml-auto flex items-center gap-1">

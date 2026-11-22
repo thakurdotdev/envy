@@ -121,14 +121,14 @@ function ChoosePassword({
           className="h-10 w-full"
           disabled={busy || !longEnough || !matches}
         >
-          {busy ? (
-            <>
-              <Spinner /> Making your keys…
-            </>
-          ) : (
-            "Set master password"
-          )}
+          {busy ? <Spinner /> : null}
+          Set master password
         </Button>
+        {busy ? (
+          <p className="text-center text-xs text-muted-foreground" aria-live="polite">
+            Making your keys. This takes a few seconds.
+          </p>
+        ) : null}
       </form>
     </AuthLayout>
   );
@@ -162,7 +162,7 @@ function SaveRecoveryKey({ recoveryKey, onDone }: { recoveryKey: string; onDone:
     >
       <div className="space-y-4">
         <div
-          className="grid grid-cols-3 gap-x-3 gap-y-2 rounded-lg border bg-muted/50 p-4 text-center font-mono text-sm tracking-wider sm:grid-cols-4"
+          className="grid grid-cols-3 gap-x-3 gap-y-2.5 rounded-lg border border-code-border bg-code p-5 text-center font-mono text-sm tracking-wider text-code-foreground sm:grid-cols-4"
           data-testid="recovery-key"
           aria-label={`Recovery key: ${recoveryKey}`}
         >
@@ -178,8 +178,8 @@ function SaveRecoveryKey({ recoveryKey, onDone }: { recoveryKey: string; onDone:
             <Download /> Download
           </Button>
         </div>
-        <div className="flex gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+        <div className="flex gap-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p>
             It is shown only once. Without your password and this key, nobody can recover your
             secrets, not even us.

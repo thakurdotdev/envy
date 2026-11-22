@@ -3,10 +3,13 @@
 import { TriangleAlert } from "lucide-react";
 import { Suspense, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { SectionTitle } from "@/components/app-shell";
+import { SectionHeader } from "@/components/page-header";
 import { CopyButton } from "@/components/copy-button";
 import { ProjectFrame, type ProjectInfo } from "@/components/project-frame";
+import { InlineCode } from "@/components/inline-code";
 import { EmptyState, LoadError, LoadingRows } from "@/components/states";
+import { StatusBadge } from "@/components/status-badge";
+import { TableFrame } from "@/components/table-frame";
 import { TimeAgo } from "@/components/time-ago";
 import {
   AlertDialog,
@@ -17,9 +20,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -111,67 +120,81 @@ function Tokens({ project }: { project: ProjectInfo }) {
   return (
     <div className="space-y-10">
       <section aria-labelledby="tokens-heading">
-        <SectionTitle
+        <SectionHeader
           id="tokens-heading"
           title="Service tokens"
-          description="Each token lets CI read one environment and nothing else. Set it as ENVY_TOKEN."
+          description={
+            <>
+              Each token lets CI read one environment and nothing else. Set it as{" "}
+              <InlineCode>ENVY_TOKEN</InlineCode>.
+            </>
+          }
         />
         {tokens.length === 0 ? (
           <EmptyState title="No service tokens yet">
             Make one below for your CI, for example GitHub Actions.
           </EmptyState>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Environment</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tokens.map((token) => (
-                <TableRow key={token.id} className={cn(!token.isActive && "text-muted-foreground")}>
-                  <TableCell className="font-medium">{token.name}</TableCell>
-                  <TableCell>{token.environmentName}</TableCell>
-                  <TableCell>
-                    <TimeAgo value={token.createdAt} />
-                  </TableCell>
-                  <TableCell>
-                    {token.lastUsedAt === null ? "Never" : <TimeAgo value={token.lastUsedAt} />}
-                  </TableCell>
-                  <TableCell>
-                    {token.expiresAt === null
-                      ? "Never"
-                      : new Date(token.expiresAt).toLocaleDateString(undefined, {
-                          dateStyle: "medium",
-                        })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {token.revokedAt !== null ? (
-                      <Badge variant="secondary">revoked</Badge>
-                    ) : !token.isActive ? (
-                      <Badge variant="secondary">expired</Badge>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => setRevoking(token)}
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </TableCell>
+          <TableFrame>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Environment</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Last used</TableHead>
+                  <TableHead>Expires</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {tokens.map((token) => (
+                  <TableRow
+                    key={token.id}
+                    className={cn(!token.isActive && "text-muted-foreground")}
+                  >
+                    <TableCell
+                      className={cn("font-mono text-sm", token.isActive && "text-foreground")}
+                    >
+                      {token.name}
+                    </TableCell>
+                    <TableCell>{token.environmentName}</TableCell>
+                    <TableCell>
+                      <TimeAgo value={token.createdAt} />
+                    </TableCell>
+                    <TableCell>
+                      {token.lastUsedAt === null ? "Never" : <TimeAgo value={token.lastUsedAt} />}
+                    </TableCell>
+                    <TableCell>
+                      {token.expiresAt === null
+                        ? "Never"
+                        : new Date(token.expiresAt).toLocaleDateString(undefined, {
+                            dateStyle: "medium",
+                          })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {token.revokedAt !== null ? (
+                        <StatusBadge>revoked</StatusBadge>
+                      ) : !token.isActive ? (
+                        <StatusBadge>expired</StatusBadge>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => setRevoking(token)}
+                        >
+                          Revoke
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableFrame>
         )}
       </section>
       <CreateToken projectId={project.id} environments={environments} onCreated={reload} />
@@ -239,7 +262,7 @@ function RevokeDialog({
             onClick={() => (token === undefined ? undefined : void revoke(token))}
           >
             {busy ? <Spinner /> : null}
-            {busy ? "Revoking…" : "Revoke token"}
+            Revoke token
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -297,77 +320,85 @@ function CreateToken({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>New service token</CardTitle>
-        <CardDescription>
-          Made in this browser. The server never sees the part that decrypts, and the token is shown
-          only once.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-end gap-3">
-          <div className="min-w-48 flex-1 space-y-2">
-            <Label htmlFor="token-name">Name</Label>
-            <Input
-              id="token-name"
-              value={name}
-              maxLength={100}
-              onChange={(event) => setName(event.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="token-environment">Environment</Label>
-            <Select value={environmentId} onValueChange={setEnvironmentId}>
-              <SelectTrigger id="token-environment" className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {environments.map((environment) => (
-                  <SelectItem key={environment.id} value={environment.id}>
-                    {environment.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="token-expiry">Expires</Label>
-            <Select
-              value={expiry}
-              onValueChange={(value) => {
-                const option = EXPIRY_OPTIONS.find((candidate) => candidate.value === value);
-                if (option !== undefined) {
-                  setExpiry(option.value);
-                }
-              }}
-            >
-              <SelectTrigger id="token-expiry" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {EXPIRY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button type="submit" disabled={busy || name.trim() === ""}>
-            {busy ? <Spinner /> : null}
-            {busy ? "Creating…" : "Create token"}
-          </Button>
-        </form>
-        {error === undefined ? null : (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-      </CardContent>
+    <>
+      <form onSubmit={(event) => void submit(event)}>
+        <Card className="gap-5">
+          <CardHeader>
+            <CardTitle>New service token</CardTitle>
+            <CardDescription>
+              Made in this browser. The server never sees the part that decrypts, and the token is
+              shown only once.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-48 flex-1 space-y-2">
+                <Label htmlFor="token-name">Name</Label>
+                <Input
+                  id="token-name"
+                  className="font-mono"
+                  value={name}
+                  maxLength={100}
+                  onChange={(event) => setName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="token-environment">Environment</Label>
+                <Select value={environmentId} onValueChange={setEnvironmentId}>
+                  <SelectTrigger id="token-environment" className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {environments.map((environment) => (
+                      <SelectItem key={environment.id} value={environment.id}>
+                        {environment.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="token-expiry">Expires</Label>
+                <Select
+                  value={expiry}
+                  onValueChange={(value) => {
+                    const option = EXPIRY_OPTIONS.find((candidate) => candidate.value === value);
+                    if (option !== undefined) {
+                      setExpiry(option.value);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="token-expiry" className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPIRY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {error === undefined ? null : (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+          </CardContent>
+          <CardFooter className="flex-wrap justify-between gap-3">
+            <p className="text-xs text-muted-foreground">Read only. One environment per token.</p>
+            <Button type="submit" disabled={busy || name.trim() === ""}>
+              {busy ? <Spinner /> : null}
+              Create token
+            </Button>
+          </CardFooter>
+        </Card>
+      </form>
       <NewTokenDialog created={created} onDone={() => setCreated(undefined)} />
-    </Card>
+    </>
   );
 }
 
@@ -394,8 +425,8 @@ function NewTokenDialog({
         <DialogHeader>
           <DialogTitle>Store your new token</DialogTitle>
           <DialogDescription>
-            Save it as the <code className="font-mono">ENVY_TOKEN</code> secret in your CI. It can
-            read {created?.environment} and nothing else.
+            Save it as the <InlineCode>ENVY_TOKEN</InlineCode> secret in your CI. It can read{" "}
+            {created?.environment} and nothing else.
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-2">
@@ -410,8 +441,8 @@ function NewTokenDialog({
             Copy
           </CopyButton>
         </div>
-        <p className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+        <p className="flex items-start gap-2.5 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           This is the only time it is shown. If you lose it, revoke it and make a new one.
         </p>
         <div className="flex items-center gap-2">

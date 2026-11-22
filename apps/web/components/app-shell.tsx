@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession, useUnlocked } from "@/lib/session";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "./brand-mark";
 import { SessionGate } from "./session-gate";
 
 // Pages that belong to a project, so "Projects" stays highlighted on them.
@@ -31,7 +32,7 @@ export function DashboardFrame({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <Header />
-      <main id="main" className="mx-auto w-full max-w-5xl px-4 py-6 sm:py-8">
+      <main id="main" className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         {children}
       </main>
     </SessionGate>
@@ -45,13 +46,16 @@ function Header() {
   const isProjectPage = PROJECT_PAGES.includes(pathname);
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+    <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
       <nav
         aria-label="Main"
-        className="mx-auto flex h-14 max-w-5xl items-center gap-1 px-4 sm:gap-2"
+        className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4 sm:px-6"
       >
-        <Link href="/projects" className="mr-2 font-semibold tracking-tight sm:mr-4">
-          Envy
+        <Link
+          href="/projects"
+          className="mr-2 rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:mr-5"
+        >
+          <BrandMark />
         </Link>
         <NavLink href="/projects" active={isProjectPage}>
           Projects
@@ -60,7 +64,7 @@ function Header() {
           Devices
         </NavLink>
         <span
-          className="ml-auto hidden truncate text-sm text-muted-foreground sm:inline"
+          className="ml-auto hidden max-w-48 truncate font-mono text-xs text-muted-foreground sm:inline"
           title={profile.email}
         >
           @{profile.githubLogin}
@@ -68,7 +72,7 @@ function Header() {
         <Button
           variant="outline"
           size="sm"
-          className="ml-auto sm:ml-2"
+          className="ml-auto sm:ml-3"
           onClick={session.lock}
           title="Forget the unlocked key in this tab. You stay signed in."
         >
@@ -78,6 +82,7 @@ function Header() {
           variant="ghost"
           size="sm"
           aria-label="Sign out"
+          className="text-muted-foreground"
           onClick={() => void session.signOut()}
         >
           <LogOut /> <span className="hidden sm:inline">Sign out</span>
@@ -87,6 +92,7 @@ function Header() {
   );
 }
 
+/** A header link. The page you are on gets a thin brand-red line under it. */
 function NavLink({
   href,
   active,
@@ -101,60 +107,11 @@ function NavLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "rounded-md px-2 py-1.5 text-sm transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        active ? "font-medium text-foreground" : "text-muted-foreground",
+        "relative inline-flex h-14 items-center px-2 text-sm transition-colors after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:rounded-full hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:after:bg-ring sm:px-2.5 sm:after:inset-x-2.5",
+        active ? "font-medium text-foreground after:bg-brand" : "text-muted-foreground",
       )}
     >
       {children}
     </Link>
-  );
-}
-
-export function PageTitle({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0 space-y-1">
-        <h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>
-        {description === undefined ? null : (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-/** A section heading inside a page, with optional actions on the right. */
-export function SectionTitle({
-  id,
-  title,
-  description,
-  children,
-}: {
-  id?: string;
-  title: string;
-  description?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0 space-y-1">
-        <h2 id={id} className="text-lg font-semibold tracking-tight">
-          {title}
-        </h2>
-        {description === undefined ? null : (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
-      </div>
-      {children}
-    </div>
   );
 }

@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { ChevronRight, Plus } from "lucide-react";
-import { PageTitle } from "@/components/app-shell";
-import { EmptyState, LoadError, LoadingRows } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
+import { ChevronRight, FolderLock, Plus } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
+import { InlineCode } from "@/components/inline-code";
+import { LoadError, LoadingRows } from "@/components/states";
+import { RoleBadge, StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -38,7 +38,7 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <PageTitle
+      <PageHeader
         title="Projects"
         description="Each project has its own environments, members and tokens."
       >
@@ -48,47 +48,55 @@ export default function ProjectsPage() {
             <Plus /> New project
           </Button>
         )}
-      </PageTitle>
+      </PageHeader>
       {state.status === "loading" ? <LoadingRows label="Loading projects" /> : null}
       {state.status === "error" ? <LoadError message={state.message} onRetry={reload} /> : null}
       {state.status === "ready" && state.data.items.length === 0 ? (
-        <EmptyState title="No projects yet">
-          <p>
-            Create one here, or run <code className="font-mono">envy init</code> in a project folder
-            to upload its .env files.
+        <div className="flex flex-col items-center rounded-lg border border-dashed bg-card/50 px-4 py-16 text-center">
+          <span className="flex size-10 items-center justify-center rounded-lg border bg-card text-muted-foreground shadow-xs">
+            <FolderLock className="size-5" />
+          </span>
+          <p className="mt-4 font-medium">No projects yet</p>
+          <p className="mt-1.5 max-w-sm text-sm text-pretty text-muted-foreground">
+            Create one here, or run <InlineCode>envy init</InlineCode> in a project folder to upload
+            its .env files.
           </p>
-          <Button className="mt-4" onClick={() => setCreating(true)}>
+          <Button className="mt-6" onClick={() => setCreating(true)}>
             <Plus /> New project
           </Button>
-        </EmptyState>
+        </div>
       ) : null}
       {state.status === "ready" ? (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {state.data.items.map((project) => (
             <li key={project.id}>
               <Link
                 href={`/project?id=${project.id}`}
-                className="group block rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className="group flex h-full flex-col gap-4 rounded-lg border bg-card p-4 shadow-xs transition-colors hover:border-input hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                <Card className="transition-colors group-hover:bg-muted/50">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between gap-2">
-                      <span className="truncate">{project.name}</span>
-                      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                    </CardTitle>
-                    <CardDescription className="flex gap-2">
-                      <Badge variant="secondary">{project.role}</Badge>
-                      {(project.pendingMembers ?? 0) > 0 ? (
-                        <Badge
-                          variant="outline"
-                          className="border-amber-500/40 text-amber-700 dark:text-amber-300"
-                        >
-                          {project.pendingMembers} waiting for access
-                        </Badge>
-                      ) : null}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
+                <span className="flex items-start gap-3">
+                  <span
+                    aria-hidden
+                    className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted font-mono text-sm font-medium text-muted-foreground"
+                  >
+                    {monogram(project.name)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{project.name}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                      {project.slug}
+                    </span>
+                  </span>
+                  <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+                </span>
+                <span className="flex flex-wrap gap-1.5">
+                  <RoleBadge role={project.role} />
+                  {(project.pendingMembers ?? 0) > 0 ? (
+                    <StatusBadge tone="warning">
+                      {project.pendingMembers} waiting for access
+                    </StatusBadge>
+                  ) : null}
+                </span>
               </Link>
             </li>
           ))}
@@ -97,6 +105,12 @@ export default function ProjectsPage() {
       <NewProjectDialog open={creating} onOpenChange={setCreating} />
     </>
   );
+}
+
+/** The first letter of a project name, for the small square on its card. */
+function monogram(name: string): string {
+  const [first = ""] = Array.from(name.trim());
+  return first.toLocaleUpperCase();
 }
 
 function NewProjectDialog({
@@ -171,7 +185,7 @@ function NewProjectDialog({
           <DialogFooter>
             <Button type="submit" disabled={busy || name.trim() === ""}>
               {busy ? <Spinner /> : null}
-              {busy ? "Creating…" : "Create project"}
+              Create project
             </Button>
           </DialogFooter>
         </form>

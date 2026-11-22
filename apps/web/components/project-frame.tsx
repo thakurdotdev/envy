@@ -4,13 +4,13 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { useLoad } from "@/hooks/use-load";
 import { call } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { LoadError, LoadingRows } from "./states";
+import { RoleBadge } from "./status-badge";
 
 export type ProjectInfo = {
   id: string;
@@ -54,10 +54,10 @@ export function ProjectFrame({
   }
   return (
     <>
-      <nav aria-label="Breadcrumb" className="mb-2 text-sm text-muted-foreground">
-        <ol className="flex items-center gap-1">
+      <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted-foreground">
+        <ol className="flex min-w-0 items-center gap-1">
           <li>
-            <Link href="/projects" className="hover:text-foreground">
+            <Link href="/projects" className="transition-colors hover:text-foreground">
               Projects
             </Link>
           </li>
@@ -76,11 +76,9 @@ export function ProjectFrame({
         </>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="mb-5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="truncate text-2xl font-semibold tracking-tight">{project.name}</h1>
-            <Badge variant="secondary" title="Your role in this project">
-              {project.role}
-            </Badge>
+            <RoleBadge role={project.role} title="Your role in this project" />
           </div>
           <ProjectNav project={project} />
           {children(project)}
@@ -101,7 +99,10 @@ function ProjectNav({ project }: { project: ProjectInfo }) {
   ].filter((link) => link.show);
 
   return (
-    <nav aria-label="Project" className="-mx-4 mb-6 overflow-x-auto border-b px-4">
+    <nav
+      aria-label="Project"
+      className="scrollbar-none -mx-4 mb-8 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0"
+    >
       <ul className="flex gap-1">
         {links.map((link) => {
           const active = pathname === link.href;
@@ -111,10 +112,10 @@ function ProjectNav({ project }: { project: ProjectInfo }) {
                 href={`${link.href}?id=${project.id}`}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "-mb-px inline-flex h-10 items-center border-b-2 px-3 text-sm whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  "inline-flex h-10 items-center border-b-2 px-3 text-sm whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:text-foreground focus-visible:outline-none",
                   active
-                    ? "border-foreground font-medium text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
+                    ? "border-brand font-medium text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
                 {link.label}
