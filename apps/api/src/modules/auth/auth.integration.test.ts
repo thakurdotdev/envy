@@ -93,12 +93,28 @@ describe("refresh tokens", () => {
   });
 
   test("a made-up refresh token is refused", async () => {
-    const response = await testApp.request("POST", "/v1/auth/refresh", {
-      body: { refreshToken: "0193a6f0-0000-7000-8000-000000000001.made-up" },
-    });
+    for (const refreshToken of ["0193a6f0-0000-7000-8000-000000000001.made-up", "not-a-uuid.x"]) {
+      const response = await testApp.request("POST", "/v1/auth/refresh", {
+        body: { refreshToken },
+      });
+      expect(response.status).toBe(401);
+      expect(readErrorCode(response.body)).toBe("REFRESH_TOKEN_INVALID");
+    }
+  });
 
-    expect(response.status).toBe(401);
-    expect(readErrorCode(response.body)).toBe("REFRESH_TOKEN_INVALID");
+  test("a made-up token with a real session id does not end that session", async () => {
+    const session = await testApp.signInWithCli(makeGitHubUser("guessed"));
+    const sessionId = session.refreshToken.split(".")[0] ?? "";
+
+    const guess = await testApp.request("POST", "/v1/auth/refresh", {
+      body: { refreshToken: `${sessionId}.made-up` },
+    });
+    expect(readErrorCode(guess.body)).toBe("REFRESH_TOKEN_INVALID");
+
+    const real = await testApp.request("POST", "/v1/auth/refresh", {
+      body: { refreshToken: session.refreshToken },
+    });
+    expect(real.status).toBe(200);
   });
 });
 
@@ -158,8 +174,14 @@ describe("web sign-in", () => {
     expect(refreshCookie).toBeString();
     expect(callback.headers.getSetCookie().join(";")).toContain("HttpOnly");
 
+    const fromOtherSite = await testApp.request("POST", "/v1/auth/refresh", {
+      headers: { cookie: `envy_refresh=${refreshCookie}`, origin: "https://evil.example" },
+    });
+    expect(fromOtherSite.status).toBe(403);
+    expect(readCookie(fromOtherSite.headers, "envy_refresh")).toBeUndefined();
+
     const refreshed = await testApp.request("POST", "/v1/auth/refresh", {
-      headers: { cookie: `envy_refresh=${refreshCookie}` },
+      headers: { cookie: `envy_refresh=${refreshCookie}`, origin: "http://web.test" },
     });
     expect(refreshed.status).toBe(200);
     expect(refreshed.body).not.toHaveProperty("refreshToken");

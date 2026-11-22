@@ -63,9 +63,12 @@ export function createRefreshToken(sessionId: string): string {
   return `${sessionId}.${randomBytes(32).toString("base64url")}`;
 }
 
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 export function readSessionIdFromRefreshToken(refreshToken: string): string | undefined {
   const [sessionId, secretPart, extra] = refreshToken.split(".");
-  if (!sessionId || !secretPart || extra !== undefined) {
+  // Checked here so a made-up id never reaches the database as a bad uuid.
+  if (!sessionId || !SESSION_ID_PATTERN.test(sessionId) || !secretPart || extra !== undefined) {
     return undefined;
   }
   return sessionId;

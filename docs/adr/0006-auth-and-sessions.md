@@ -21,7 +21,8 @@ leaves several details open.
 - **Refresh token = `<sessionId>.<32 random bytes>`**, stored as a SHA-256
   hash. The session id part lets the server find the session even when an
   old token is presented: an old token ends the whole session
-  (`REFRESH_TOKEN_REUSED`). The swap is one conditional `UPDATE`, so two
+  (`REFRESH_TOKEN_REUSED`; since ADR 0013 only the token just replaced
+  counts, a made-up one is simply invalid). The swap is one conditional `UPDATE`, so two
   requests with the same token cannot both win. There is no grace period:
   two CLI processes refreshing at the same moment will end the session, so
   the Phase 4 CLI must refresh under a lock.

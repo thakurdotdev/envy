@@ -49,6 +49,18 @@ export function loadConfig(environment: Environment): Config {
     trustProxy: read.boolean("TRUST_PROXY", false),
   };
 
+  if (config.environment === "production") {
+    // Tokens and cookies cross these addresses, so production must not use plain HTTP.
+    for (const [name, value] of [
+      ["API_URL", config.apiUrl],
+      ["WEB_URL", config.webUrl],
+    ] as const) {
+      if (value.startsWith("http:")) {
+        problems.push(`${name} must start with https:// when APP_ENV=production.`);
+      }
+    }
+  }
+
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
