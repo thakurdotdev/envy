@@ -15,6 +15,13 @@
       "when": 1795340774336,
       "tag": "0001_projects_environments_secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795342091163,
+      "tag": "0002_invites",
+      "breakpoints": true
     }
   ]
 }

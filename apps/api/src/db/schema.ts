@@ -113,6 +113,31 @@ export const members = pgTable(
   ],
 );
 
+export const invites = pgTable(
+  "invites",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    // Stored lower case; only a user with this verified GitHub email can accept.
+    email: text("email").notNull(),
+    role: memberRole("role").notNull(),
+    invitedBy: uuid("invited_by")
+      .notNull()
+      .references(() => users.id),
+    // SHA-256 of the invite token. The token itself is only in the link.
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("invites_project_id_index").on(table.projectId),
+    index("invites_invited_by_index").on(table.invitedBy),
+  ],
+);
+
 export const environments = pgTable(
   "environments",
   {
@@ -219,3 +244,4 @@ export type MemberRole = MemberRow["role"];
 export type EnvironmentRow = typeof environments.$inferSelect;
 export type SecretVersionRow = typeof secretVersions.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
+export type InviteRow = typeof invites.$inferSelect;
