@@ -23,12 +23,6 @@
   ],
   "overrides": [
     {
-      "files": ["apps/api/src/db/schema.ts"],
-      "rules": {
-        "unicorn/no-empty-file": "off"
-      }
-    },
-    {
       "files": ["packages/crypto/**"],
       "rules": {
         "no-console": "error"
