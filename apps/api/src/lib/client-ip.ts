@@ -23,8 +23,18 @@ export function getClientIp(
     // Fewer entries than proxies: the request skipped one, so take the leftmost there is.
     const client = addresses.at(-trustedProxies) ?? addresses[0];
     if (client !== undefined) {
-      return client;
+      return withoutIpv4Prefix(client);
     }
   }
-  return server?.requestIP(request)?.address ?? "unknown";
+  const connection = server?.requestIP(request)?.address;
+  return connection === undefined ? "unknown" : withoutIpv4Prefix(connection);
+}
+
+// A server listening on IPv6 sees IPv4 clients as "::ffff:1.2.3.4" (an
+// IPv4-mapped address). Store the plain "1.2.3.4" so the audit log and the
+// rate limits see one form for one client.
+const IPV4_MAPPED = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i;
+
+function withoutIpv4Prefix(address: string): string {
+  return IPV4_MAPPED.exec(address)?.[1] ?? address;
 }
