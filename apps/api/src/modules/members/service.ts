@@ -252,6 +252,10 @@ export function createMemberService(dependencies: {
      * Removes a member. An active member could read every environment, so
      * the same request must rotate every environment's key for the people
      * who stay; the removal and the rotations succeed or fail together.
+     *
+     * The service tokens they made are revoked too: they saw each full token
+     * once, so a kept copy would otherwise go on reading every new secret.
+     * Their unused invites end as well.
      */
     async remove(context: RequestContext, memberId: string, rotations: EnvironmentRotation[]) {
       const member = await findMemberAsAdmin(context, memberId);
@@ -275,8 +279,25 @@ export function createMemberService(dependencies: {
           400,
         );
       }
-      await runInTransaction(async (transaction) => {
+      const revokedTokens = await runInTransaction(async (transaction) => {
+        const now = clock.now();
         await transaction.members.remove(member.memberId);
+        await transaction.members.expireOpenInvitesFrom(member.projectId, member.userId, now);
+        const revoked = await transaction.tokens.revokeCreatedBy(
+          member.projectId,
+          member.userId,
+          now,
+        );
+        for (const token of revoked) {
+          await recordAuditEvent(transaction.audit, context, {
+            projectId: member.projectId,
+            action: "token.revoked",
+            targetType: "token",
+            targetId: token.id,
+            metadata: { name: token.name, reason: "creator removed" },
+          });
+        }
+        const revokedTokenIds = new Set(revoked.map((token) => token.id));
         const remaining = new Set(await transaction.members.listActiveUserIds(member.projectId));
         for (const environment of environments) {
           const rotation = rotationFor.get(environment.id);
@@ -287,7 +308,8 @@ export function createMemberService(dependencies: {
               environment,
               rotation,
               remaining,
-              clock.now(),
+              now,
+              revokedTokenIds,
             );
           }
         }
@@ -298,7 +320,16 @@ export function createMemberService(dependencies: {
           targetId: member.memberId,
           metadata: { githubLogin: member.githubLogin },
         });
+        return revoked;
       });
+      const environmentNames = new Map(environments.map((row) => [row.id, row.name]));
+      return {
+        revokedTokens: revokedTokens.map((token) => ({
+          id: token.id,
+          name: token.name,
+          environmentName: environmentNames.get(token.environmentId) ?? "",
+        })),
+      };
     },
   };
 }

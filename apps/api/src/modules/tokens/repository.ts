@@ -67,6 +67,29 @@ export function createTokenRepository(executor: Executor) {
         .where(and(eq(serviceTokens.id, tokenId), isNull(serviceTokens.revokedAt)));
     },
 
+    /** Revokes every active token this user made in the project, and returns them. */
+    async revokeCreatedBy(
+      projectId: string,
+      userId: string,
+      now: Date,
+    ): Promise<Array<{ id: string; name: string; environmentId: string }>> {
+      return executor
+        .update(serviceTokens)
+        .set({ revokedAt: now })
+        .where(
+          and(
+            eq(serviceTokens.projectId, projectId),
+            eq(serviceTokens.createdBy, userId),
+            isActive(now),
+          ),
+        )
+        .returning({
+          id: serviceTokens.id,
+          name: serviceTokens.name,
+          environmentId: serviceTokens.environmentId,
+        });
+    },
+
     async markUsed(tokenId: string, usedAt: Date): Promise<void> {
       await executor
         .update(serviceTokens)

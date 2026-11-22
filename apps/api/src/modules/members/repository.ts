@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull } from "drizzle-orm";
 import type { Executor } from "../../db/executor.ts";
 import {
   invites,
@@ -164,6 +164,21 @@ export function createMemberRepository(executor: Executor) {
         .where(and(eq(invites.id, inviteId), isNull(invites.acceptedAt)))
         .returning({ id: invites.id });
       return updated.length === 1;
+    },
+
+    /** Ends every unused invite this user sent for the project. */
+    async expireOpenInvitesFrom(projectId: string, userId: string, now: Date): Promise<void> {
+      await executor
+        .update(invites)
+        .set({ expiresAt: now })
+        .where(
+          and(
+            eq(invites.projectId, projectId),
+            eq(invites.invitedBy, userId),
+            isNull(invites.acceptedAt),
+            gt(invites.expiresAt, now),
+          ),
+        );
     },
   };
 }
