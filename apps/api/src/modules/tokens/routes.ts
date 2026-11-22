@@ -1,3 +1,4 @@
+import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia, t } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import type { TokenService } from "./service.ts";
@@ -23,10 +24,11 @@ export function tokenRoutes(dependencies: {
   authenticate: Authenticate;
   tokens: TokenService;
   trustProxy: boolean;
+  writeLimiter: RateLimiter;
 }) {
-  const { authenticate, tokens, trustProxy } = dependencies;
+  const { authenticate, tokens, trustProxy, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy))
+    .use(authGuard(authenticate, trustProxy, writeLimiter))
     .get("/v1/tokens/current", ({ context }) => tokens.describeCurrent(context))
     .get("/v1/projects/:id/tokens", ({ context, params }) => tokens.list(context, params.id), {
       params: IdParams,

@@ -1,3 +1,4 @@
+import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import {
@@ -15,10 +16,11 @@ export function memberRoutes(dependencies: {
   authenticate: Authenticate;
   members: MemberService;
   trustProxy: boolean;
+  writeLimiter: RateLimiter;
 }) {
-  const { authenticate, members, trustProxy } = dependencies;
+  const { authenticate, members, trustProxy, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy))
+    .use(authGuard(authenticate, trustProxy, writeLimiter))
     .get(
       "/v1/projects/:id/members",
       ({ context, params }) => members.listMembers(context, params.id),
