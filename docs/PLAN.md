@@ -10,7 +10,7 @@
 | Phase 1 — Crypto package                       | Done                       |
 | Phase 2 — API core: auth and users             | Done                       |
 | Phase 3 — API: projects, environments, secrets | Done                       |
-| Phase 4 — CLI core                             | Not started                |
+| Phase 4 — CLI core                             | Done                       |
 | Phase 5 — Teams and access                     | Not started                |
 | Phase 6 — Web dashboard                        | Not started                |
 | Phase 7 — CI tokens and polish                 | Not started                |
@@ -464,17 +464,35 @@ Open questions: none.
 
 Goal: one developer can go from zero to `envy run` in under a minute.
 
-- [ ] Command framework, output helpers, error-to-fix mapping, exit codes
-- [ ] Typed API client wrapper over Eden with auto refresh
-- [ ] Keystore (keychain with fallback from the Phase 0 spike)
-- [ ] login (device flow + master password setup or unlock + recovery key display), logout
-- [ ] init (pick or create project, detect and import `.env*`, write `.envy.json`, update `.gitignore`)
-- [ ] Environment resolver (flag, env var, branch map, default; protected confirmation)
-- [ ] pull, push (keys-only diff, conflict handling), run (inject, forward signals, pass exit code)
-- [ ] set, unset, get, use
-- [ ] `bun build --compile` script for the current platform
+- [x] Command framework, output helpers, error-to-fix mapping, exit codes
+- [x] Typed API client wrapper over Eden with auto refresh
+- [x] Keystore (keychain with fallback from the Phase 0 spike)
+- [x] login (device flow + master password setup or unlock + recovery key display), logout
+- [x] init (pick or create project, detect and import `.env*`, write `.envy.json`, update `.gitignore`)
+- [x] Environment resolver (flag, env var, branch map, default; protected confirmation)
+- [x] pull, push (keys-only diff, conflict handling), run (inject, forward signals, pass exit code)
+- [x] set, unset, get, use
+- [x] `bun build --compile` script for the current platform
 
 Done when: an end-to-end test spawns the compiled binary against a test API and covers login (mocked GitHub), init with import, push, pull, run and a conflicting push. Manual check: the whole first-run flow needs no copy-paste.
+
+#### Phase 4 summary (2026-11-22)
+
+Built:
+
+- Command framework (commander) with exit codes 0/1/2/3 (or the child's code for `run`), output helpers that respect `NO_COLOR`, a fix message for every shared API error code, prompts that fail with a clear hint when there is no terminal, keys-only diffs.
+- Eden client wrapper that refreshes the access token under a file lock and retries once on an expired token.
+- Keystore: OS keychain (`@napi-rs/keyring`), falling back to a `0600` file that never holds the private key.
+- `login` (device flow, master password set-up with recovery key, or unlock), `logout`, `init` (pick or create a project, import `.env*`, write `.envy.json`, update `.gitignore`), environment resolver, `pull`, `push` (conflict handling), `run` (signals, exit code), `set`, `unset`, `get`, `use`.
+- `bun run --filter @envy/cli build` compiles a single binary.
+- End-to-end test: builds the binary and runs it against a real API (fake GitHub) through login, init with import, pull, push, run, a second machine unlocking, a conflicting push and `--force`, protected environments and error exit codes. Unit tests for the resolver, shared-layer push, `.gitignore`, `.envy.json` and the file keystore.
+
+Decisions: ADR 0008 (environment variables, keystore fallback, shared layer on push, conflict rules, protected environments).
+
+Open questions:
+
+- The manual first-run check against real GitHub still needs a GitHub OAuth app with device flow enabled. The only thing the user types is the short code GitHub asks for.
+- The macOS keychain check from ADR 0002 is still open.
 
 ### Phase 5 — Teams and access
 
