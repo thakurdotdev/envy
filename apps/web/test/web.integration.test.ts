@@ -171,9 +171,28 @@ describe("web dashboard, end to end", () => {
     await page.getByRole("tab", { name: /development/ }).waitFor();
     const projectId = new URL(page.url()).searchParams.get("id") ?? "";
 
-    await page.getByRole("button", { name: "Add variable" }).click();
-    await page.getByLabel("Variable name").fill("FROM_WEB");
-    await page.getByLabel("Value of FROM_WEB").fill(WEB_VALUE);
+    // Text typed in the .env view becomes table rows.
+    await page.getByRole("tab", { name: ".env" }).click();
+    await page
+      .getByLabel(".env contents")
+      .fill(`# from my laptop\nFROM_WEB=${WEB_VALUE}\nexport GREETING="two words"\n`);
+    await page.getByRole("tab", { name: "Table" }).click();
+    await page.getByRole("button", { name: "Show GREETING" }).click();
+    await expectLocator(page.getByLabel("Value of GREETING")).toHaveValue("two words");
+
+    // Pasting KEY=value lines into a name box splits them into rows too.
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page
+      .getByLabel("Variable name")
+      .last()
+      .evaluate((input) => {
+        const data = new DataTransfer();
+        data.setData("text/plain", "PASTED_ONE=1\nPASTED_TWO=2");
+        input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+      });
+    await page.getByRole("button", { name: "Show PASTED_TWO" }).click();
+    await expectLocator(page.getByLabel("Value of PASTED_TWO")).toHaveValue("2");
+
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByRole("button", { name: "Save new version" }).click();
     await page.getByText("Saved version 1 of development").waitFor();
@@ -189,6 +208,9 @@ describe("web dashboard, end to end", () => {
     );
     expect((await runEnvy(["login"], folder, home)).exitCode).toBe(0);
     expect((await runEnvy(["get", "FROM_WEB"], folder, home)).stdout).toBe(`${WEB_VALUE}\n`);
+    const imported = await runEnvy(["get", "GREETING", "--json"], folder, home);
+    expect(JSON.parse(imported.stdout)).toEqual({ GREETING: "two words" });
+    expect((await runEnvy(["get", "PASTED_TWO"], folder, home)).stdout).toBe("2\n");
 
     // And the browser decrypts what the CLI wrote.
     expect((await runEnvy(["set", `FROM_CLI=${CLI_VALUE}`], folder, home)).exitCode).toBe(0);

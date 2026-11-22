@@ -1,54 +1,35 @@
 "use client";
 
-import { Copy, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { serializeDotenv } from "@envy/shared";
+import { KeyRound, Plus, Search, Undo2, Upload } from "lucide-react";
+import { useEffect, useState, type ClipboardEvent, type DragEvent } from "react";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useLoad } from "@/hooks/use-load";
 import { ApiError, errorMessage } from "@/lib/api";
+import {
+  describeImport,
+  looksLikeEnv,
+  mergeImport,
+  newRow,
+  readEnvText,
+  rowProblem,
+  rowsFromVariables,
+  toRows,
+  toSecrets,
+  type Row,
+} from "@/lib/env-rows";
 import { diffKeys, pullEnvironment, pushEnvironment, type EnvironmentSummary } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
+import { EnvTable, type RowHandlers } from "./env-table";
+import { EnvToolbar, type EditorMode } from "./env-toolbar";
+import { RawEnvView } from "./raw-env-view";
+import { SaveDialog } from "./save-dialog";
 import { EmptyState, LoadError, LoadingRows } from "./states";
 
-const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
-
-type Row = { id: number; key: string; value: string; revealed: boolean };
-let nextRowId = 1;
-
-function toRows(secrets: Record<string, string>): Row[] {
-  return Object.entries(secrets).map(([key, value]) => ({
-    id: nextRowId++,
-    key,
-    value,
-    revealed: false,
-  }));
-}
-
-function toSecrets(rows: Row[]): Record<string, string> {
-  return Object.fromEntries(
-    rows.filter((row) => row.key !== "").map((row) => [row.key, row.value]),
-  );
-}
+const MAX_FILE_BYTES = 256 * 1024;
 
 /** Edit one environment's variables. Values stay hidden until revealed. */
 export function SecretEditor({
@@ -68,6 +49,11 @@ export function SecretEditor({
     [environment.id],
   );
   const [rows, setRows] = useState<Row[]>([]);
+  const [mode, setMode] = useState<EditorMode>("table");
+  const [rawText, setRawText] = useState("");
+  const [rawError, setRawError] = useState<string | undefined>();
+  const [query, setQuery] = useState("");
+  const [dragging, setDragging] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [conflict, setConflict] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
@@ -90,15 +76,127 @@ export function SecretEditor({
   const edited = toSecrets(rows);
   const diff = diffKeys(saved, edited);
   const isDirty = diff.added.length + diff.changed.length + diff.removed.length > 0;
-  const keyNames = rows.map((row) => row.key).filter((key) => key !== "");
-  const problem = rows.some((row) => row.key !== "" && !KEY_PATTERN.test(row.key))
-    ? "Names may use letters, digits and _ (and must not start with a digit)."
-    : new Set(keyNames).size !== keyNames.length
-      ? "Two variables have the same name."
-      : undefined;
+  const count = Object.keys(edited).length;
+  const problem =
+    mode === "env" ? rawError : rows.map((row) => rowProblem(row, rows)).find(Boolean);
+  const allRevealed = rows.length > 0 && rows.every((row) => row.revealed);
+  const search = query.trim().toLowerCase();
+  const visibleRows =
+    search === ""
+      ? rows
+      : rows.filter((row) => row.key === "" || row.key.toLowerCase().includes(search));
 
   function update(id: number, change: Partial<Row>) {
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...change } : row)));
+  }
+
+  function addRow() {
+    setQuery("");
+    setRows((current) => [...current, newRow("", "", true)]);
+  }
+
+  function remove(row: Row) {
+    const index = rows.findIndex((candidate) => candidate.id === row.id);
+    setRows((current) => current.filter((candidate) => candidate.id !== row.id));
+    if (row.key !== "" || row.value !== "") {
+      toast(`Removed ${row.key || "a variable"}`, {
+        action: {
+          label: "Undo",
+          onClick: () =>
+            setRows((current) => [...current.slice(0, index), row, ...current.slice(index)]),
+        },
+      });
+    }
+  }
+
+  function importVariables(variables: Record<string, string>, base: Row[], source: string) {
+    const { added, changed } = describeImport(base, variables, false);
+    setRows(mergeImport(base, variables, false));
+    const summary = [
+      added.length > 0 ? `${added.length} new` : "",
+      changed.length > 0 ? `${changed.length} changed` : "",
+    ].filter((part) => part !== "");
+    toast.success(`Imported from ${source}`, {
+      description: summary.length === 0 ? "Everything already matched." : summary.join(", "),
+    });
+  }
+
+  function importText(text: string, source: string) {
+    const parsed = readEnvText(text);
+    if (parsed.status === "ok") {
+      setMode("table");
+      importVariables(parsed.variables, rows, source);
+    } else {
+      toast.error(parsed.status === "error" ? parsed.message : `No variables found in ${source}.`);
+    }
+  }
+
+  async function importFile(file: File) {
+    if (file.size > MAX_FILE_BYTES) {
+      toast.error("That file is too big for a .env file.");
+      return;
+    }
+    importText(await file.text(), file.name);
+  }
+
+  // Pasting a whole .env into any field splits it into rows.
+  function pasteInto(
+    event: ClipboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    row: Row,
+    field: "key" | "value",
+  ) {
+    const text = event.clipboardData.getData("text");
+    const isMultiLine = /[\r\n]/.test(text);
+    const isEnv = looksLikeEnv(text) && (field === "key" || isMultiLine);
+    const parsed = isEnv ? readEnvText(text) : undefined;
+    if (parsed?.status === "ok") {
+      event.preventDefault();
+      // Pasting into an empty row replaces it instead of leaving a blank row.
+      const isEmptyRow = row.key === "" && row.value === "";
+      const base = isEmptyRow ? rows.filter((candidate) => candidate.id !== row.id) : rows;
+      importVariables(parsed.variables, base, "the clipboard");
+    } else if (field === "value" && isMultiLine) {
+      // A certificate or key: keep the line breaks instead of losing them.
+      event.preventDefault();
+      const target = event.currentTarget;
+      const start = target.selectionStart ?? row.value.length;
+      const end = target.selectionEnd ?? row.value.length;
+      const pasted = text.replaceAll("\r\n", "\n");
+      update(row.id, {
+        value: row.value.slice(0, start) + pasted + row.value.slice(end),
+        revealed: true,
+      });
+    }
+  }
+
+  function changeMode(next: EditorMode) {
+    if (next === "env") {
+      setRawText(serializeDotenv(edited));
+      setRawError(undefined);
+    }
+    setMode(next);
+  }
+
+  function changeRawText(text: string) {
+    setRawText(text);
+    const parsed = readEnvText(text);
+    if (parsed.status === "error") {
+      setRawError(parsed.message);
+      return;
+    }
+    setRawError(undefined);
+    setRows((current) =>
+      parsed.status === "ok" ? rowsFromVariables(current, parsed.variables) : [],
+    );
+  }
+
+  function onDrop(event: DragEvent) {
+    const file = event.dataTransfer.files[0];
+    setDragging(false);
+    if (file !== undefined && canEdit) {
+      event.preventDefault();
+      void importFile(file);
+    }
   }
 
   async function save() {
@@ -127,8 +225,26 @@ export function SecretEditor({
     }
   }
 
+  const handlers: RowHandlers = { update, remove, pasteInto, addAfterLast: addRow };
+
   return (
-    <div className="space-y-4">
+    <div
+      className="relative space-y-3"
+      onDragOver={(event) => {
+        if (canEdit && event.dataTransfer.types.includes("Files")) {
+          event.preventDefault();
+          setDragging(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!(
+          event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)
+        )) {
+          setDragging(false);
+        }
+      }}
+      onDrop={onDrop}
+    >
       {conflict === undefined ? null : (
         <Alert variant="destructive">
           <AlertDescription>
@@ -139,100 +255,128 @@ export function SecretEditor({
           </AlertDescription>
         </Alert>
       )}
-      {rows.length === 0 && !canEdit ? (
+      <EnvToolbar
+        mode={mode}
+        onModeChange={changeMode}
+        count={count}
+        canEdit={canEdit}
+        allRevealed={allRevealed}
+        onRevealAll={() =>
+          setRows((current) => current.map((row) => ({ ...row, revealed: !allRevealed })))
+        }
+        onCopyAll={() => {
+          void navigator.clipboard
+            .writeText(serializeDotenv(edited))
+            .then(() => toast.success(`Copied ${count} variables as .env`));
+        }}
+        onImportFile={(file) => void importFile(file)}
+        onAdd={addRow}
+      />
+
+      {mode === "env" ? (
+        <RawEnvView text={rawText} error={rawError} canEdit={canEdit} onChange={changeRawText} />
+      ) : rows.length === 0 && !canEdit ? (
         <EmptyState title={`${environment.name} has no variables yet`} />
-      ) : null}
-      {rows.length > 0 ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-1/3">Name</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead className="w-32 text-right">
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>
-                  <Input
-                    aria-label="Variable name"
-                    className="font-mono"
-                    value={row.key}
-                    readOnly={!canEdit}
-                    onChange={(event) => update(row.id, { key: event.target.value })}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    aria-label={`Value of ${row.key || "new variable"}`}
-                    className="font-mono"
-                    type={row.revealed ? "text" : "password"}
-                    autoComplete="off"
-                    value={row.value}
-                    readOnly={!canEdit}
-                    onChange={(event) => update(row.id, { value: event.target.value })}
-                  />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={row.revealed ? `Hide ${row.key}` : `Show ${row.key}`}
-                    aria-pressed={row.revealed}
-                    onClick={() => update(row.id, { revealed: !row.revealed })}
-                  >
-                    {row.revealed ? <EyeOff /> : <Eye />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Copy ${row.key}`}
-                    onClick={() => {
-                      void navigator.clipboard
-                        .writeText(row.value)
-                        .then(() => toast.success(`Copied ${row.key}`));
-                    }}
-                  >
-                    <Copy />
-                  </Button>
-                  {canEdit ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Remove ${row.key}`}
-                      onClick={() =>
-                        setRows((current) => current.filter((candidate) => candidate.id !== row.id))
-                      }
-                    >
-                      <Trash2 />
-                    </Button>
-                  ) : null}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : null}
-      {canEdit ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() =>
-              setRows((current) => [
-                ...current,
-                { id: nextRowId++, key: "", value: "", revealed: true },
-              ])
+      ) : rows.length === 0 ? (
+        <button
+          type="button"
+          onClick={addRow}
+          onPaste={(event) => {
+            const text = event.clipboardData.getData("text");
+            if (text.trim() !== "") {
+              event.preventDefault();
+              importText(text, "the clipboard");
             }
-          >
-            <Plus /> Add variable
-          </Button>
-          <span className="ml-auto text-sm text-muted-foreground" aria-live="polite">
-            {problem ?? (isDirty ? "Unsaved changes" : "")}
+          }}
+          className="flex w-full flex-col items-center rounded-xl border border-dashed px-4 py-10 text-center transition-colors hover:bg-muted/30"
+        >
+          <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <KeyRound className="size-5" />
           </span>
-          <Button variant="ghost" disabled={!isDirty} onClick={() => setRows(toRows(saved))}>
+          <span className="mt-3 text-sm font-medium">{environment.name} has no variables yet</span>
+          <span className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Add one, paste a whole .env file into any field, or drop a .env file here.
+          </span>
+          <span className="mt-4 inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-sm font-medium">
+            <Plus className="size-4" /> Add variable
+          </span>
+        </button>
+      ) : (
+        <>
+          {rows.length > 6 ? (
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Filter variables by name"
+                placeholder="Filter by name"
+                className="pl-8"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+          ) : null}
+          <EnvTable
+            rows={rows}
+            visibleRows={visibleRows}
+            saved={saved}
+            canEdit={canEdit}
+            handlers={handlers}
+          />
+          {search !== "" && visibleRows.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No variables match “{query}”.
+            </p>
+          ) : null}
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={addRow}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Plus className="size-4" /> Add another
+              <span className="hidden sm:inline">· or paste a .env file into any field</span>
+            </button>
+          ) : null}
+        </>
+      )}
+
+      {canEdit && diff.removed.length > 0 ? (
+        <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm">
+          <p className="mb-2 font-medium text-destructive">
+            Removed when you save ({diff.removed.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {diff.removed.map((key) => (
+              <button
+                key={key}
+                type="button"
+                title="Put it back"
+                onClick={() => setRows((current) => [...current, newRow(key, saved[key] ?? "")])}
+                className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 font-mono text-xs line-through decoration-destructive/60 hover:no-underline"
+              >
+                {key} <Undo2 className="size-3" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {canEdit && (rows.length > 0 || isDirty) ? (
+        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+          <span className="text-sm text-muted-foreground" aria-live="polite">
+            {mode === "env" && rawError !== undefined
+              ? "Fix the .env text above to save."
+              : (problem ?? (isDirty ? "Unsaved changes" : "All changes saved"))}
+          </span>
+          <Button
+            variant="ghost"
+            className="ml-auto"
+            disabled={!isDirty}
+            onClick={() => {
+              setRows(toRows(saved));
+              setMode("table");
+            }}
+          >
             Discard
           </Button>
           <Button
@@ -243,33 +387,22 @@ export function SecretEditor({
           </Button>
         </div>
       ) : null}
-      <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Save to {environment.name}?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                {environment.isProtected ? (
-                  <p className="font-medium text-destructive">
-                    {environment.name} is a protected environment.
-                  </p>
-                ) : null}
-                <p className="font-mono text-sm">
-                  {[
-                    ...diff.added.map((key) => `+ ${key}`),
-                    ...diff.changed.map((key) => `~ ${key}`),
-                    ...diff.removed.map((key) => `− ${key}`),
-                  ].join("  ")}
-                </p>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void save()}>Save new version</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
+      {dragging ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl border-2 border-dashed border-ring bg-background/85 backdrop-blur-sm">
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <Upload className="size-4" /> Drop to import variables
+          </span>
+        </div>
+      ) : null}
+
+      <SaveDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        environment={environment}
+        diff={diff}
+        onSave={() => void save()}
+      />
     </div>
   );
 }
