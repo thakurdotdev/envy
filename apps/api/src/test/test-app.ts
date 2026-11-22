@@ -18,13 +18,13 @@ export const testConfig: Config = {
 };
 
 /** The API with a fresh database, a fake GitHub and a clock tests can move. */
-export async function createTestApp() {
+export async function createTestApp(overrides: Partial<Config> = {}) {
   const testDatabase = await createTestDatabase();
   const github = createFakeGitHub();
   let now = new Date("2026-11-22T12:00:00.000Z");
   const clock = { now: () => now };
   const app = createApp({
-    config: testConfig,
+    config: { ...testConfig, ...overrides },
     database: testDatabase.database,
     clock,
     logger: silentLogger,

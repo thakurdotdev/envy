@@ -7,6 +7,9 @@ export function createFakeGitHub() {
   // (for end-to-end tests where nobody can click "Authorize").
   let autoApproveUser: GitHubUser | undefined;
   let intervalSeconds = 5;
+  // Where the browser is sent to "approve" a web sign-in. Browser tests point
+  // this at a page they serve, which sends the browser straight back.
+  let authorizeBaseUrl = "https://github.test/login/oauth/authorize";
   const webCodes = new Map<string, GitHubUser>();
   const usersByToken = new Map<string, GitHubUser>();
   let counter = 0;
@@ -38,7 +41,7 @@ export function createFakeGitHub() {
       return { status: "complete", githubAccessToken: issueToken(user) };
     },
     authorizeUrl(state, redirectUri) {
-      const url = new URL("https://github.test/login/oauth/authorize");
+      const url = new URL(authorizeBaseUrl);
       url.searchParams.set("state", state);
       url.searchParams.set("redirect_uri", redirectUri);
       return url.toString();
@@ -67,6 +70,10 @@ export function createFakeGitHub() {
     autoApproveDevices(user: GitHubUser) {
       autoApproveUser = user;
       intervalSeconds = 0;
+    },
+    /** Sends web sign-ins to this page instead of github.com. */
+    setAuthorizeUrl(url: string) {
+      authorizeBaseUrl = url;
     },
     /** GitHub will accept this code at the web callback. */
     allowWebCode: (code: string, user: GitHubUser) => webCodes.set(code, user),
