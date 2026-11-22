@@ -1,0 +1,6 @@
+[install]
+# Save exact versions so package.json and bun.lock always agree.
+exact = true
+
+[fmt]
+printWidth = 100
