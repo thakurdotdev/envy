@@ -1,0 +1,98 @@
+name: Release
+
+# Builds the CLI for every platform on a version tag (v1.2.3), checks each
+# binary works (including its OS keychain), and publishes them with a
+# checksums.txt. The API and web are deployed separately through Shipyard.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-latest, file: envy-linux-x64 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, file: envy-linux-arm64 }
+          - { target: darwin-arm64, runner: macos-latest, file: envy-darwin-arm64 }
+          - { target: darwin-x64, runner: macos-15-intel, file: envy-darwin-x64 }
+          - { target: windows-x64, runner: windows-latest, file: envy-windows-x64.exe }
+    # Built on each platform itself, because the keychain library is a
+    # native module that must match the platform (ADR 0002).
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check the tag matches the CLI version
+        run: |
+          version="$(bun -e 'console.log((await Bun.file("apps/cli/package.json").json()).version)')"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match apps/cli/package.json version $version" >&2
+            exit 1
+          fi
+
+      - name: Build
+        env:
+          ENVY_API_URL: ${{ vars.ENVY_API_URL }}
+        run: |
+          mkdir -p dist
+          bun build apps/cli/src/index.ts --compile --minify \
+            --define "process.env.ENVY_BUILD_API_URL=\"$ENVY_API_URL\"" \
+            --outfile "dist/${{ matrix.file }}"
+
+      - name: Smoke test (version and OS keychain)
+        run: |
+          "./dist/${{ matrix.file }}" --version
+          "./dist/${{ matrix.file }}" doctor --json > doctor.json || true
+          bun -e '
+            const checks = JSON.parse(await Bun.file("doctor.json").text());
+            const keychain = checks.find((check) => check.check === "keychain");
+            if (keychain?.status !== "ok") {
+              console.error("The OS keychain does not work in this binary:", keychain);
+              process.exit(1);
+            }
+            console.log("Keychain works:", keychain.message);
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/${{ matrix.file }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum envy-* > checksums.txt && cat checksums.txt
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
