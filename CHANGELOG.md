@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Website and dashboard: new design. Warm neutral colours with Envy red as the one accent, a mono type for names and commands, light and dark. The landing page shows a .env file next to what the server stores. Commands stay on one line on phones.
+- Dashboard: busy buttons keep their label and show a spinner; the variables table, history, members, tokens, audit log and devices share one table and badge style.
+- Web: a test fails on uppercase labels, gradients, em dashes and emoji.
+
 ## 0.1.3 (2026-11-22)
 
 - CLI: the install script and `envy upgrade` send one anonymous count (install, update or upgrade; version; OS and CPU; CI or not). Nothing else, and no other command calls home. `DO_NOT_TRACK=1` or `ENVY_NO_ANALYTICS=1` turns it off.

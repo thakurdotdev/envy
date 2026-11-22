@@ -119,8 +119,9 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 0.09);
   --input: oklch(1 0 0 / 0.14);
-  --ring: oklch(0.645 0.2 25 / 0.6);
-  --brand: oklch(0.645 0.2 25);
+  --ring: oklch(0.5771 0.2152 27.33 / 0.6);
+  /* Same red as light mode: white text on it stays at 4.8:1, and the large heading and icons that use it as a colour stay above 3:1. */
+  --brand: oklch(0.5771 0.2152 27.33);
   --brand-foreground: oklch(0.99 0 0);
   --success: oklch(0.72 0.14 150);
   --warning: oklch(0.8 0.14 75);
