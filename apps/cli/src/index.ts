@@ -1,5 +1,132 @@
 #!/usr/bin/env bun
-import { CLI_COMMAND, PRODUCT_NAME } from "@envy/shared";
+import { CryptoError } from "@envy/crypto";
+import { CLI_COMMAND } from "@envy/shared";
+import { Command } from "commander";
+import packageJson from "../package.json" with { type: "json" };
+import { init } from "./commands/init.ts";
+import { login } from "./commands/login.ts";
+import { logout } from "./commands/logout.ts";
+import { pull } from "./commands/pull.ts";
+import { push } from "./commands/push.ts";
+import { run } from "./commands/run.ts";
+import { useEnvironment } from "./commands/use.ts";
+import { getVariable, setVariables, unsetVariables } from "./commands/variables.ts";
+import { CliError, EXIT_CODES } from "./core/errors.ts";
+import { output } from "./ui/output.ts";
 
-// Phase 4 replaces this with the real command framework.
-console.log(`${PRODUCT_NAME} (${CLI_COMMAND}) is not ready yet.`);
+const program = new Command(CLI_COMMAND)
+  .description("Share .env secrets with your team. Encrypted on your machine.")
+  .version(packageJson.version)
+  .option("--debug", "show technical details when something goes wrong")
+  // Lets `envy run -- cmd --flag` pass --flag to cmd instead of reading it.
+  .enablePositionalOptions();
+
+const environmentOption = [
+  "-e, --env <name>",
+  "environment to use (default: from .envy.json)",
+] as const;
+const yesOption = ["-y, --yes", "answer yes to confirmations (for scripts and CI)"] as const;
+
+program
+  .command("login")
+  .description("sign in with GitHub and unlock your keys on this device")
+  .option("--api-url <url>", "use your own Envy server")
+  .action(login);
+
+program
+  .command("logout")
+  .description("sign out and remove your keys from this device")
+  .action(logout);
+
+program
+  .command("init")
+  .description("link this folder to a project and import its .env files")
+  .option("--project <name>", "link to an existing project (name or id)")
+  .option("--create <name>", "create a new project with this name")
+  .option(...yesOption)
+  .option("--force", "replace an existing .envy.json")
+  .action(init);
+
+program
+  .command("pull")
+  .description("write the environment's variables to the local .env file")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .action(pull);
+
+program
+  .command("push")
+  .description("upload the local .env file as a new version")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .option("-m, --message <text>", "note to show in envy history")
+  .option("--force", "replace a version someone pushed after your last pull")
+  .action(push);
+
+program
+  .command("run")
+  .description("run a command with the variables injected (nothing is written to disk)")
+  .argument("<command...>", "the command, after --")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .passThroughOptions()
+  .action(run);
+
+program
+  .command("set")
+  .description("set variables: envy set KEY=value, or envy set KEY to type the value hidden")
+  .argument("<assignments...>")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .action(setVariables);
+
+program
+  .command("unset")
+  .description("remove variables")
+  .argument("<keys...>")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .action(unsetVariables);
+
+program
+  .command("get")
+  .description("print one value")
+  .argument("<key>")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .action(getVariable);
+
+program
+  .command("use")
+  .description("set the default environment for this folder")
+  .argument("<environment>")
+  .action(useEnvironment);
+
+function handleError(error: unknown): never {
+  const debug = program.opts()["debug"] === true || process.env["ENVY_DEBUG"] === "1";
+  if (error instanceof CliError) {
+    output.error(error.message, error.hint);
+    if (debug && error.apiCode !== undefined) {
+      output.info(output.dim(`API error code: ${error.apiCode}`));
+    }
+    process.exit(error.exitCode);
+  }
+  if (error instanceof CryptoError) {
+    output.error(
+      "Could not decrypt the data. It may have been changed, or your key is out of date.",
+      "Run envy login again. If it keeps happening, tell a project admin.",
+    );
+  } else {
+    output.error("Something went wrong inside envy.", "Run it again with --debug to see details.");
+  }
+  if (debug && error instanceof Error) {
+    output.info(output.dim(error.stack ?? error.message));
+  }
+  process.exit(EXIT_CODES.userError);
+}
+
+try {
+  await program.parseAsync(process.argv);
+} catch (error) {
+  handleError(error);
+}

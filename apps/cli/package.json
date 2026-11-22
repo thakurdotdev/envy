@@ -11,8 +11,13 @@
     "build": "bun build src/index.ts --compile --outfile dist/envy"
   },
   "dependencies": {
+    "@clack/prompts": "1.9.0",
     "@elysiajs/eden": "1.4.9",
-    "@envy/shared": "workspace:*"
+    "@envy/crypto": "workspace:*",
+    "@envy/shared": "workspace:*",
+    "@napi-rs/keyring": "2.1.2",
+    "commander": "15.1.0",
+    "picocolors": "1.1.1"
   },
   "devDependencies": {
     "@envy/api": "workspace:*",
