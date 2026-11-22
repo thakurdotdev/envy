@@ -154,7 +154,12 @@ export function createAuthService(dependencies: AuthServiceDependencies) {
 
       const presentedHash = hashToken(refreshToken);
       if (!hashesMatch(presentedHash, session.refreshTokenHash)) {
-        return revokeAfterReuse(session.id);
+        const previousHash = session.previousRefreshTokenHash;
+        if (previousHash !== null && hashesMatch(presentedHash, previousHash)) {
+          return revokeAfterReuse(session.id);
+        }
+        // Never a real token of this session: refuse it, but keep the session.
+        throw invalid;
       }
       const nextRefreshToken = createRefreshToken(session.id);
       const rotated = await sessions.rotateRefreshToken({

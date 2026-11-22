@@ -43,6 +43,7 @@ export function createSessionRepository(database: Database) {
         .update(sessions)
         .set({
           refreshTokenHash: input.newHash,
+          previousRefreshTokenHash: input.oldHash,
           expiresAt: input.expiresAt,
           lastUsedAt: input.usedAt,
         })

@@ -54,6 +54,7 @@ export function authRoutes({
   // same settings it was set with.
   const expired = { maxAge: 0, expires: new Date(0) };
   const limit = (limiter: RateLimiter, name: string) => limitByIp(limiter, name, config.trustProxy);
+  const webOrigin = new URL(config.webUrl).origin;
 
   return (
     new Elysia()
@@ -107,13 +108,22 @@ export function authRoutes({
       )
       .post(
         "/v1/auth/refresh",
-        async ({ body, cookie }) => {
+        async ({ body, cookie, headers }) => {
           const fromBody = body?.refreshToken;
           const cookieValue = cookie[REFRESH_COOKIE]?.value;
           const fromCookie = typeof cookieValue === "string" ? cookieValue : undefined;
           const refreshToken = fromBody ?? fromCookie;
           if (refreshToken === undefined) {
             throw new AppError("NOT_AUTHENTICATED", "Sign in first.", 401);
+          }
+          // The browser adds the cookie to any request, even one started by
+          // another site, so a cookie refresh must come from the dashboard.
+          if (fromBody === undefined && headers["origin"] !== webOrigin) {
+            throw new AppError(
+              "FORBIDDEN",
+              "Refreshing with the cookie only works from the Envy dashboard.",
+              403,
+            );
           }
           const result = await auth.refresh(refreshToken);
           if (fromBody === undefined) {

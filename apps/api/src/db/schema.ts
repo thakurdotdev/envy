@@ -57,6 +57,10 @@ export const sessions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     // SHA-256 of the current refresh token. The token itself is never stored.
     refreshTokenHash: text("refresh_token_hash").notNull(),
+    // SHA-256 of the token it replaced. Only this one counts as "reused": a
+    // made-up token is just invalid, so knowing a session id is not enough
+    // to end someone else's session.
+    previousRefreshTokenHash: text("previous_refresh_token_hash"),
     deviceName: text("device_name").notNull(),
     client: sessionClient("client").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

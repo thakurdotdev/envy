@@ -42,4 +42,17 @@ describe("loadConfig", () => {
       expect(caught.message).not.toContain(shortSecret);
     }
   });
+
+  test("production refuses plain HTTP addresses", () => {
+    expect(() => loadConfig({ ...validEnvironment, APP_ENV: "production" })).toThrow(
+      "API_URL must start with https://",
+    );
+    const config = loadConfig({
+      ...validEnvironment,
+      APP_ENV: "production",
+      API_URL: "https://api.example.com",
+      WEB_URL: "https://example.com",
+    });
+    expect(config.environment).toBe("production");
+  });
 });
