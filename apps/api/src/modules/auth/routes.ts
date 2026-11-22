@@ -95,7 +95,7 @@ export function authRoutes({
               deviceName: "Web browser",
             });
             cookie[REFRESH_COOKIE]?.set({ value: session.refreshToken, ...refreshCookie });
-            return redirect(`${config.webUrl}/`);
+            return redirect(`${config.webUrl}/projects`);
           } catch (error) {
             // The browser is mid-redirect, so send it back to the dashboard
             // with the error code instead of showing raw JSON.

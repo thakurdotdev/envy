@@ -153,7 +153,7 @@ describe("web sign-in", () => {
       { headers: { cookie: `envy_oauth_state=${state}` } },
     );
     expect(callback.status).toBe(302);
-    expect(callback.headers.get("location")).toBe("http://web.test/");
+    expect(callback.headers.get("location")).toBe("http://web.test/projects");
     const refreshCookie = readCookie(callback.headers, "envy_refresh");
     expect(refreshCookie).toBeString();
     expect(callback.headers.getSetCookie().join(";")).toContain("HttpOnly");

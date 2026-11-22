@@ -150,7 +150,7 @@ describe("web dashboard, end to end", () => {
   test("browser and CLI read each other's secrets, and no plaintext crosses the network", async () => {
     const page = await browser.newPage();
     recordTraffic(page);
-    await page.goto(`http://127.0.0.1:${webServer.port}/`);
+    await page.goto(`http://127.0.0.1:${webServer.port}/projects`);
     await page.getByRole("link", { name: "Sign in with GitHub" }).click();
 
     // First visit: choose a master password and see the recovery key once.
