@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The install script and `envy upgrade` send one anonymous count (install, update or upgrade; version; OS and CPU; CI or not). Nothing else, and no other command calls home. `DO_NOT_TRACK=1` or `ENVY_NO_ANALYTICS=1` turns it off.
+
 - API: `TRUST_PROXY` is now the number of proxies in front of the API that append to `X-Forwarded-For` (`true` still means 1). See `docs/deploy.md` for running behind Cloudflare.
 
 ## 0.1.2 (2026-11-22)

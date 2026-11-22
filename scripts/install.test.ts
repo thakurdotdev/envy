@@ -11,14 +11,23 @@ const binary = "#!/bin/sh\necho 0.2.0\n";
 let folder: string;
 let server: ReturnType<typeof Bun.serve>;
 let checksums = "";
+// What the script sent to the (fake) analytics server: body and user agent.
+const counts: Array<{ body: unknown; userAgent: string }> = [];
 
 beforeAll(async () => {
   folder = await mkdtemp(join(tmpdir(), "envy-install-"));
   server = Bun.serve({
     port: 0,
     hostname: "127.0.0.1",
-    fetch(request) {
+    async fetch(request) {
       const path = new URL(request.url).pathname;
+      if (path === "/api/send") {
+        counts.push({
+          body: await request.json(),
+          userAgent: request.headers.get("user-agent") ?? "",
+        });
+        return Response.json({});
+      }
       if (path === `/${binaryName}`) {
         return new Response(binary);
       }
@@ -44,6 +53,8 @@ async function install(installDir: string, extraEnv: Record<string, string> = {}
       ENVY_INSTALL_DIR: installDir,
       ENVY_DOWNLOAD_URL: `http://127.0.0.1:${server.port}`,
       ENVY_VERSION: "0.2.0",
+      // Never the real analytics server from a test.
+      ENVY_ANALYTICS_URL: `http://127.0.0.1:${server.port}`,
       ...extraEnv,
     },
     stdout: "pipe",
@@ -57,6 +68,14 @@ async function fakeInstalledVersion(installDir: string, version: string) {
   await mkdir(installDir, { recursive: true });
   await writeFile(join(installDir, "envy"), `#!/bin/sh\necho ${version}\n`);
   await chmod(join(installDir, "envy"), 0o755);
+}
+
+/** The count is sent in the background, so give it a moment to arrive. */
+async function waitForCounts(expected: number) {
+  for (let attempt = 0; attempt < 100 && counts.length < expected; attempt += 1) {
+    await Bun.sleep(20);
+  }
+  return counts.splice(0);
 }
 
 describe("install.sh", () => {
@@ -107,5 +126,49 @@ describe("install.sh", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("does not match its published checksum");
     expect(await Bun.file(join(installDir, "envy")).exists()).toBe(false);
+  });
+
+  test("sends one anonymous count, and none when DO_NOT_TRACK or ENVY_NO_ANALYTICS is set", async () => {
+    const hash = new Bun.CryptoHasher("sha256").update(binary).digest("hex");
+    checksums = `${hash}  ${binaryName}\n`;
+    // Counts from the earlier tests arrive in the background; let them land first.
+    await Bun.sleep(300);
+    counts.splice(0);
+
+    const fresh = await install(join(folder, "counted"), { CI: "" });
+    expect(fresh.stderr).toContain("Counted this install anonymously");
+    const [sent] = await waitForCounts(1);
+    expect(sent?.body).toEqual({
+      type: "event",
+      payload: {
+        website: "67b6d992-f2da-46f9-904b-43ec0114349e",
+        hostname: "envy.thakur.dev",
+        url: "/cli/install",
+        name: "cli-install",
+        data: {
+          version: "0.2.0",
+          os: binaryName.split("-")[1],
+          arch: binaryName.split("-")[2],
+          ci: false,
+        },
+      },
+    });
+    // Umami drops bot-like user agents such as curl's.
+    expect(sent?.userAgent).toStartWith("envy-cli/0.2.0 (");
+
+    const update = join(folder, "counted-update");
+    await fakeInstalledVersion(update, "0.1.0");
+    await install(update, { CI: "true" });
+    const [updated] = await waitForCounts(1);
+    expect(JSON.stringify(updated?.body)).toContain('"name":"cli-update"');
+    expect(JSON.stringify(updated?.body)).toContain('"ci":true');
+
+    for (const optOut of [{ DO_NOT_TRACK: "1" }, { ENVY_NO_ANALYTICS: "true" }]) {
+      const quiet = await install(join(folder, `quiet-${Object.keys(optOut)[0]}`), optOut);
+      expect(quiet.exitCode).toBe(0);
+      expect(quiet.stderr).not.toContain("Counted this install");
+    }
+    await Bun.sleep(300);
+    expect(counts).toHaveLength(0);
   });
 });

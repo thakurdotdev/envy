@@ -20,6 +20,11 @@ Windows: download `envy-windows-x64.exe` from the
 [latest release](https://github.com/thakurdotdev/envy/releases/latest) and
 compare it with `checksums.txt`. Update later with `envy upgrade`.
 
+The install script and `envy upgrade` each send one anonymous count (install,
+update or upgrade; version; OS and CPU; whether it ran in CI) so we know which
+versions are in use. Nothing about you, your projects or your secrets, and no
+other command calls home. `DO_NOT_TRACK=1` or `ENVY_NO_ANALYTICS=1` turns it off.
+
 ## Quick start
 
 **1. Sign up.** Approve the sign-in on GitHub, then choose a master password.

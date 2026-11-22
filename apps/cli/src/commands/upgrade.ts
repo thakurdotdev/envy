@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { chmod, rename, rm, writeFile } from "node:fs/promises";
 import pc from "picocolors";
 import packageJson from "../../package.json" with { type: "json" };
+import { analyticsAllowed, countUpgrade } from "../core/analytics.ts";
 import { CliError, EXIT_CODES } from "../core/errors.ts";
 import {
   binaryNameForThisMachine,
@@ -80,6 +81,15 @@ export async function upgrade(
     comparison === 0 ? `Reinstalled envy ${pc.bold(target)}` : `Updated envy ${change}`,
   );
   output.info(output.dim(`What's new: ${RELEASES_PAGE}/tag/v${target}`));
+  if (analyticsAllowed()) {
+    output.info(
+      output.dim(
+        "Counted this upgrade anonymously (versions, OS and CPU). Opt out: DO_NOT_TRACK=1",
+      ),
+    );
+    const [, os = "", arch = ""] = /^envy-([a-z]+)-([a-z0-9]+)/.exec(fileName) ?? [];
+    await countUpgrade({ from: current, to: target, os, arch });
+  }
 }
 
 function assertIsInstalledBinary(): void {

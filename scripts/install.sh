@@ -7,6 +7,10 @@
 #
 # ENVY_VERSION=0.1.0 picks a version. ENVY_FORCE=1 reinstalls the same
 # version. ENVY_DOWNLOAD_URL overrides where the files come from (tests).
+#
+# After a successful install it sends one anonymous count: install or update,
+# the version, OS, CPU and whether it ran in CI. Nothing else. DO_NOT_TRACK=1
+# or ENVY_NO_ANALYTICS=1 turns it off.
 set -eu
 
 repo="thakurdotdev/envy"
@@ -139,4 +143,26 @@ else
   printf '%s\n' "    ${bold}envy login${reset}   ${dim}sign in with GitHub${reset}" >&2
   printf '%s\n' "    ${bold}envy init${reset}    ${dim}link this project${reset}" >&2
   printf '\n%s\n\n' "  ${dim}Docs: https://envy.thakur.dev/docs${reset}" >&2
+fi
+
+# 7. One anonymous count, in the background so it never slows the install.
+# ENVY_ANALYTICS_URL overrides where it goes (tests).
+opted_out() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    "" | 0 | false) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+if ! opted_out "${DO_NOT_TRACK:-}" && ! opted_out "${ENVY_NO_ANALYTICS:-}"; then
+  installed="$("$target" --version 2>/dev/null | head -n 1 | tr -cd 'A-Za-z0-9.+-')" || installed=""
+  event="cli-install"
+  [ -n "$current" ] && event="cli-update"
+  ci=false
+  [ -n "${CI:-}" ] && ci=true
+  body="{\"type\":\"event\",\"payload\":{\"website\":\"67b6d992-f2da-46f9-904b-43ec0114349e\",\"hostname\":\"envy.thakur.dev\",\"url\":\"/cli/${event#cli-}\",\"name\":\"$event\",\"data\":{\"version\":\"${installed:-unknown}\",\"os\":\"$os\",\"arch\":\"$arch\",\"ci\":$ci}}}"
+  # Umami drops requests whose user agent looks like a bot, and curl's does.
+  (curl -fsS -m 5 -X POST -H "Content-Type: application/json" \
+    -A "envy-cli/${installed:-unknown} ($os; $arch)" --data "$body" \
+    "${ENVY_ANALYTICS_URL:-https://analytics.thakur.dev}/api/send" >/dev/null 2>&1 &)
+  printf '%s\n\n' "  ${dim}Counted this install anonymously (version, OS and CPU). Opt out: DO_NOT_TRACK=1${reset}" >&2
 fi
