@@ -208,7 +208,11 @@ tokens
 
 program
   .command("upgrade")
-  .description("install the latest envy release (checksum verified)")
+  .alias("update")
+  .description("update envy to the latest release (or a version you name), checksum verified")
+  .argument("[version]", "a version such as 0.2.0; the latest if left out")
+  .option("--check", "only say whether a new version is available")
+  .option("--force", "reinstall even if this version is already installed")
   .action(upgrade);
 
 program
