@@ -1,7 +1,9 @@
 import { Elysia } from "elysia";
 import { authGuard } from "../../lib/auth-guard.ts";
 import type { AuthService } from "../auth/service.ts";
+import { RotationSchema } from "../members/schema.ts";
 import { CreateEnvironmentBody, EnvironmentIdParams, KeyQuery, ProjectIdParams } from "./schema.ts";
+import { t } from "elysia";
 import type { EnvironmentService } from "./service.ts";
 
 export function environmentRoutes(dependencies: {
@@ -25,6 +27,11 @@ export function environmentRoutes(dependencies: {
         return environment;
       },
       { params: ProjectIdParams, body: CreateEnvironmentBody },
+    )
+    .post(
+      "/v1/environments/:id/rotate",
+      ({ context, params, body }) => environments.rotate(context, params.id, body),
+      { params: EnvironmentIdParams, body: t.Omit(RotationSchema, ["environmentId"]) },
     )
     .get(
       "/v1/environments/:id/key",

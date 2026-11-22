@@ -6,6 +6,7 @@ import { AppError } from "../../lib/errors.ts";
 import type { RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
+import { applyRotation, type EnvironmentRotation } from "./rotation.ts";
 
 export type CreateEnvironmentInput = {
   name: string;
@@ -82,6 +83,28 @@ export function createEnvironmentService(dependencies: {
         }
         throw error;
       }
+    },
+
+    /** A new key version for one environment, for every active member. */
+    async rotate(
+      context: RequestContext,
+      environmentId: string,
+      rotation: Omit<EnvironmentRotation, "environmentId">,
+    ) {
+      const environment = await access.assertEnvironmentRole(context, environmentId, "admin");
+      await runInTransaction(async (transaction) => {
+        const recipients = new Set(
+          await transaction.members.listActiveUserIds(environment.projectId),
+        );
+        await applyRotation(
+          transaction,
+          context,
+          environment,
+          { ...rotation, environmentId },
+          recipients,
+        );
+      });
+      return { keyVersion: rotation.newKeyVersion };
     },
 
     /** The caller's wrapped copy of the environment key. */

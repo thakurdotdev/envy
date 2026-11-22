@@ -1,0 +1,65 @@
+import { Elysia } from "elysia";
+import { authGuard } from "../../lib/auth-guard.ts";
+import type { AuthService } from "../auth/service.ts";
+import {
+  ChangeRoleBody,
+  GrantBody,
+  InviteBody,
+  InviteTokenParams,
+  MemberIdParams,
+  ProjectIdParams,
+  RemoveMemberBody,
+} from "./schema.ts";
+import type { MemberService } from "./service.ts";
+
+export function memberRoutes(dependencies: {
+  auth: AuthService;
+  members: MemberService;
+  trustProxy: boolean;
+}) {
+  const { auth, members, trustProxy } = dependencies;
+  return new Elysia()
+    .use(authGuard(auth, trustProxy))
+    .get(
+      "/v1/projects/:id/members",
+      ({ context, params }) => members.listMembers(context, params.id),
+      {
+        params: ProjectIdParams,
+      },
+    )
+    .post(
+      "/v1/projects/:id/members",
+      async ({ context, params, body, set }) => {
+        const invite = await members.invite(context, params.id, {
+          email: body.email,
+          role: body.role ?? "member",
+        });
+        set.status = 201;
+        return invite;
+      },
+      { params: ProjectIdParams, body: InviteBody },
+    )
+    .post(
+      "/v1/invites/:token/accept",
+      ({ context, params }) => members.acceptInvite(context, params.token),
+      { params: InviteTokenParams },
+    )
+    .post(
+      "/v1/members/:id/grant",
+      ({ context, params, body }) => members.grant(context, params.id, body.wrappedKeys),
+      { params: MemberIdParams, body: GrantBody },
+    )
+    .patch(
+      "/v1/members/:id",
+      ({ context, params, body }) => members.changeRole(context, params.id, body.role),
+      { params: MemberIdParams, body: ChangeRoleBody },
+    )
+    .delete(
+      "/v1/members/:id",
+      async ({ context, params, body, set }) => {
+        await members.remove(context, params.id, body?.rotations ?? []);
+        set.status = 204;
+      },
+      { params: MemberIdParams, body: RemoveMemberBody },
+    );
+}
