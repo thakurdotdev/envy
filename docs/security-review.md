@@ -1,4 +1,4 @@
-# Security review (Phase 8)
+# Security review
 
 A walk through every place a secret value, key, token or password touches
 memory, logs, errors or the network, on 2026-11-22.
@@ -63,6 +63,45 @@ Diffs everywhere show key names only.
 
 Nothing in the API binary, the CLI binary or the web bundle is affected.
 Re-run `bun audit` before each release.
+
+## Second audit (2026-11-22)
+
+A full pass over the API, CLI, web dashboard and release pipeline, looking
+for ways around the protections above. Every finding below is fixed and
+tested; ADR 0013 has the details.
+
+| Severity | Finding                                                                                                                                                          | Fix                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| High     | A removed admin kept a working copy of every service token they made, and rotation gave those tokens the new key, so they could read every later version         | Removal revokes the member's tokens and invites; keys sent for those tokens are dropped |
+| High     | Behind a proxy the client IP was the first `X-Forwarded-For` entry, which the client controls: every per-IP limit (sign-in, writes) could be dodged              | Use the last entry, the one the proxy added                                             |
+| High     | `.envy.json` is committed, and its `file` could be `../../anything` or absolute: `envy pull` would overwrite that file, `envy push` would upload it              | `file` must stay inside the folder; links pointing outside are refused                  |
+| Medium   | `envy accept` and the web invite page showed the fingerprint of the key in the server's answer, so a server that swapped the key would also show a matching code | Fingerprint from the local key; refuse if the server's copy differs                     |
+| Medium   | A server could serve an old secrets version (correctly numbered) as the latest, or report an old key version so new pushes used a key a removed member still had | `trust.json` remembers the newest version and key version; older ones are refused       |
+| Medium   | After the first contact, nothing stopped a server from swapping a teammate's or token's public key before a grant or rotation                                    | `trust.json` pins public keys on first sight; a change is refused                       |
+| Medium   | Anyone who learned a session id could end that session by refreshing with a made-up token; a non-UUID session id caused a 500                                    | Only the previous token counts as reuse; ids are checked first                          |
+| Low      | The refresh cookie could be used by any page on the same site (for example another subdomain)                                                                    | Cookie refreshes need `Origin` = `WEB_URL`                                              |
+| Low      | The CLI accepted any `http://` server address, and production config accepted `http://` URLs                                                                     | `https://` required, except `http://` on loopback                                       |
+| Low      | The web dashboard relied on the host for CSP and referrer headers                                                                                                | CSP and `no-referrer` built into every page                                             |
+| Low      | Atomic writes used a predictable temporary name (`<file>.<pid>.tmp`)                                                                                             | Random name, created exclusively                                                        |
+| Low      | Release and CI actions were pinned by movable tags; checkouts kept the git token; releases had no provenance                                                     | Pinned to SHAs, `persist-credentials: false`, signed build provenance                   |
+
+Checked and found sound: authenticated encryption and AAD binding, Argon2id
+bounds, recovery key checksums, constant-time hash comparisons, JWT
+algorithm pinning, session checks on every request, OAuth `state`, role
+checks ("not found" for non-members), service-token scoping, request
+validation that never echoes values, logger redaction, the browser key wipe.
+
+Not changed, worth knowing:
+
+- `envy run` passes every variable to the command, including ones such as
+  `NODE_OPTIONS` or `LD_PRELOAD` that change what a program loads. Anyone who
+  can push to an environment can therefore run code on teammates' machines
+  that use `envy run`. Pushing needs the member role, which is trusted.
+- The OAuth device flow can be phished like any device flow: only approve a
+  code you started yourself.
+- Release downloads are checked against `checksums.txt` from the same
+  release; use `gh attestation verify` for a check that does not trust the
+  release page.
 
 ## Known limits (unchanged)
 

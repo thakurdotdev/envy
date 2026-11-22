@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+Security fixes from a second audit (see `docs/security-review.md` and ADR 0013):
+
+- Removing a member also revokes the service tokens they made and their unused invites. The CLI lists the revoked tokens so you can make new ones for CI.
+- The CLI remembers teammates' and tokens' public keys and the newest version of each environment (`trust.json`), and refuses a swapped key or a rolled-back environment.
+- `envy accept` and the web invite page show the fingerprint of your own key, and refuse if the server has a different one.
+- `.envy.json` `file` must stay inside the project folder; links pointing outside it are refused.
+- The CLI only talks to `https://` servers (plain `http://` only for localhost).
+- API: per-IP rate limits can no longer be dodged with a fake `X-Forwarded-For`; a made-up refresh token no longer ends a session; cookie refreshes must come from the dashboard; production needs `https://` URLs.
+- Web: the Content-Security-Policy and `no-referrer` are built into every page.
+- Releases: actions pinned to commit SHAs and signed build provenance.
+
 ## 0.1.1 (2026-11-22)
 
 - Install script: shows the platform and version, says which version it updates from, shows a download progress bar, skips an install that is already up to date, and prints the exact PATH line for your shell.
