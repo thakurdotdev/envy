@@ -1,0 +1,23 @@
+# Local dependencies for development. Start with: docker compose up -d
+# The database and role names match production (database "envy", role "appuser").
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: appuser
+      POSTGRES_DB: envy
+    ports:
+      # Bound to localhost only, so the database is never reachable from the network.
+      # Set ENVY_POSTGRES_PORT if another Postgres already uses 5432 on your machine.
+      - "127.0.0.1:${ENVY_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d envy"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres-data:
