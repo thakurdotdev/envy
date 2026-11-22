@@ -125,6 +125,10 @@ nginx then appends that address to `X-Forwarded-For`, so the API runs with
 directly cannot fake it: their connection is not from Cloudflare, so nginx
 keeps their own address.
 
+If `TRUST_PROXY` is left at 0 (or `false`) in production, every request
+seems to come from nginx itself: the audit log shows `::ffff:127.0.0.1` and all
+users share one rate limit. The API logs a warning at start when this happens.
+
 Without that nginx file, the last entry is Cloudflare's edge and the visitor
 is second from the right (`TRUST_PROXY=2`), but then a direct connection can
 put any address in that position.

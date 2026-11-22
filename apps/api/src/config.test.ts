@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ConfigError, loadConfig } from "./config.ts";
+import { ConfigError, configWarnings, loadConfig } from "./config.ts";
 
 const validEnvironment = {
   DATABASE_URL: "postgres://appuser:appuser@localhost:5432/envy",
@@ -61,5 +61,25 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "true" }).trustedProxies).toBe(1);
     expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "false" }).trustedProxies).toBe(0);
     expect(() => loadConfig({ ...validEnvironment, TRUST_PROXY: "9" })).toThrow("TRUST_PROXY");
+  });
+});
+
+describe("configWarnings", () => {
+  const production = {
+    ...validEnvironment,
+    APP_ENV: "production",
+    API_URL: "https://api.example.com",
+    WEB_URL: "https://example.com",
+  };
+
+  test("warns when production trusts no proxy, so every client looks like the proxy", () => {
+    const warnings = configWarnings(loadConfig({ ...production, TRUST_PROXY: "false" }));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("TRUST_PROXY");
+  });
+
+  test("stays quiet with a proxy count, or outside production", () => {
+    expect(configWarnings(loadConfig({ ...production, TRUST_PROXY: "1" }))).toEqual([]);
+    expect(configWarnings(loadConfig(validEnvironment))).toEqual([]);
   });
 });
