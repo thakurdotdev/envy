@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 (2026-11-22)
 
 Security fixes from a second audit (see `docs/security-review.md` and ADR 0013):
 
