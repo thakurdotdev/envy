@@ -7,12 +7,12 @@ import type { AuditService } from "./service.ts";
 export function auditRoutes(dependencies: {
   authenticate: Authenticate;
   audit: AuditService;
-  trustProxy: boolean;
+  trustedProxies: number;
   writeLimiter: RateLimiter;
 }) {
-  const { authenticate, audit, trustProxy, writeLimiter } = dependencies;
+  const { authenticate, audit, trustedProxies, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy, writeLimiter))
+    .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get(
       "/v1/projects/:id/audit",
       ({ context, params, query }) => audit.listForProject(context, params.id, query),

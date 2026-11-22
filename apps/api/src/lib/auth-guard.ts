@@ -17,7 +17,7 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export function authGuard(
   authenticate: Authenticate,
-  trustProxy: boolean,
+  trustedProxies: number,
   writeLimiter?: RateLimiter,
 ) {
   // No plugin name on purpose: Elysia skips a named plugin the second time it
@@ -37,7 +37,7 @@ export function authGuard(
     }
     const context: RequestContext = {
       actor,
-      ip: getClientIp(request, server, trustProxy),
+      ip: getClientIp(request, server, trustedProxies),
       userAgent: headers["user-agent"]?.slice(0, 300) ?? null,
     };
     return { actor, context };

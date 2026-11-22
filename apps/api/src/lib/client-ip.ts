@@ -1,24 +1,29 @@
 import type { Server } from "bun";
 
 /**
- * Finds the address the request came from. X-Forwarded-For is only trusted
- * when the API runs behind a proxy (TRUST_PROXY=true); otherwise anyone
- * could pick their own IP and dodge rate limits.
+ * Finds the address the request came from.
  *
- * Behind a proxy the last address is used, not the first: the proxy adds
- * the address it saw to the end of the header, while everything before it
- * was sent by the client and can be made up.
+ * `trustedProxies` is how many proxies in front of the API add an address to
+ * the end of X-Forwarded-For (TRUST_PROXY). Each one appends the address it
+ * saw, so with Cloudflare then nginx the header ends "<client>, <cloudflare>"
+ * and the client is the second address from the right. Anything further left
+ * was sent by the client itself and could be made up to dodge rate limits.
+ * With 0, the header is ignored and the connection's own address is used.
  */
 export function getClientIp(
   request: Request,
   server: Server<unknown> | null,
-  trustProxy: boolean,
+  trustedProxies: number,
 ): string {
-  if (trustProxy) {
-    const forwardedFor = request.headers.get("x-forwarded-for");
-    const lastAddress = forwardedFor?.split(",").at(-1)?.trim();
-    if (lastAddress) {
-      return lastAddress;
+  if (trustedProxies > 0) {
+    const addresses = (request.headers.get("x-forwarded-for") ?? "")
+      .split(",")
+      .map((address) => address.trim())
+      .filter((address) => address !== "");
+    // Fewer entries than proxies: the request skipped one, so take the leftmost there is.
+    const client = addresses.at(-trustedProxies) ?? addresses[0];
+    if (client !== undefined) {
+      return client;
     }
   }
   return server?.requestIP(request)?.address ?? "unknown";

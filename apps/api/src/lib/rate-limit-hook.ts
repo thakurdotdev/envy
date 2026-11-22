@@ -10,9 +10,9 @@ type HookContext = {
 };
 
 /** A `beforeHandle` hook that answers 429 when one IP sends too many requests. */
-export function limitByIp(limiter: RateLimiter, name: string, trustProxy: boolean) {
+export function limitByIp(limiter: RateLimiter, name: string, trustedProxies: number) {
   return ({ request, server, set }: HookContext): void => {
-    const ip = getClientIp(request, server, trustProxy);
+    const ip = getClientIp(request, server, trustedProxies);
     if (!limiter.allow(`${name}:${ip}`)) {
       set.headers["retry-after"] = 60;
       throw new AppError("RATE_LIMITED", "Too many requests. Wait a minute and try again.", 429);

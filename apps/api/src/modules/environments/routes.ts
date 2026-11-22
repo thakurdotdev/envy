@@ -9,12 +9,12 @@ import type { EnvironmentService } from "./service.ts";
 export function environmentRoutes(dependencies: {
   authenticate: Authenticate;
   environments: EnvironmentService;
-  trustProxy: boolean;
+  trustedProxies: number;
   writeLimiter: RateLimiter;
 }) {
-  const { authenticate, environments, trustProxy, writeLimiter } = dependencies;
+  const { authenticate, environments, trustedProxies, writeLimiter } = dependencies;
   return new Elysia()
-    .use(authGuard(authenticate, trustProxy, writeLimiter))
+    .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get(
       "/v1/projects/:id/environments",
       ({ context, params }) => environments.listEnvironments(context, params.id),

@@ -20,7 +20,7 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export function httpBasics(
   logger: Logger,
-  options: { writeLimiter?: RateLimiter; trustProxy?: boolean } = {},
+  options: { writeLimiter?: RateLimiter; trustedProxies?: number } = {},
 ) {
   return (
     new Elysia({ name: "http-basics" })
@@ -29,7 +29,7 @@ export function httpBasics(
         if (options.writeLimiter === undefined || READ_METHODS.has(request.method)) {
           return;
         }
-        const ip = getClientIp(request, server, options.trustProxy === true);
+        const ip = getClientIp(request, server, options.trustedProxies ?? 0);
         if (!options.writeLimiter.allow(`ip:${ip}`)) {
           set.headers["retry-after"] = "60";
           throw new AppError(

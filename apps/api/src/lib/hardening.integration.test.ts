@@ -36,7 +36,7 @@ describe("hardening", () => {
   });
 
   test("one user cannot make more than 120 changes a minute, even from many addresses", async () => {
-    const behindProxy = await createTestApp({ trustProxy: true });
+    const behindProxy = await createTestApp({ trustedProxies: 2 });
     try {
       const user = await signUpWithKeys(behindProxy, "busy");
       const statuses: number[] = [];
@@ -48,7 +48,7 @@ describe("hardening", () => {
           {
             accessToken: user.accessToken,
             body: { role: "viewer" },
-            headers: { "x-forwarded-for": `203.0.113.${attempt % 250}` },
+            headers: { "x-forwarded-for": `203.0.113.${attempt % 250}, 172.70.0.1` },
           },
         );
         statuses.push(response.status);
@@ -63,13 +63,14 @@ describe("hardening", () => {
   });
 
   test("made-up addresses in front of the proxy's own do not dodge sign-in limits", async () => {
-    const behindProxy = await createTestApp({ trustProxy: true });
+    const behindProxy = await createTestApp({ trustedProxies: 2 });
     try {
       const statuses: number[] = [];
       for (let attempt = 0; attempt < 11; attempt += 1) {
-        // The client sends a new fake address each time; the proxy appends the real one.
+        // The client sends a new fake address each time; Cloudflare appends the real
+        // one and nginx appends Cloudflare's.
         const response = await behindProxy.request("POST", "/v1/auth/github/device", {
-          headers: { "x-forwarded-for": `10.0.0.${attempt}, 198.51.100.7` },
+          headers: { "x-forwarded-for": `10.0.0.${attempt}, 198.51.100.7, 172.70.0.1` },
         });
         statuses.push(response.status);
       }
