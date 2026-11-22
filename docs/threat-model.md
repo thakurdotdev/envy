@@ -99,6 +99,19 @@ All of this is in `packages/crypto` and tested there.
   to anyone who kept the old key, so the CLI reminds the admin to change the
   real credentials.
 
+## Service tokens (CI)
+
+- A token is `envy_<tokenId>_<privateKey>`. Only `envy_<tokenId>` is sent to
+  the API; the server stores a hash of it, the token's public key and the
+  environment key wrapped for that public key. A database leak therefore
+  exposes no usable token and no way to decrypt.
+- A token reads one environment and nothing else: no pushes, no other
+  environments, no shared layer, no project or member routes.
+- A leaked token gives read access to that one environment until it is
+  revoked or expires. Revoking takes effect on the next request.
+- Rotating an environment's key re-wraps it for its active tokens, so a
+  member's removal does not break CI.
+
 ## Out of scope for v1
 
 - A malicious client build or a hacked developer machine. Envy cannot protect
