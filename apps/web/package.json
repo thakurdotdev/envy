@@ -8,6 +8,7 @@
     "build": "next build"
   },
   "devDependencies": {
+    "@envy/api": "workspace:*",
     "@envy/tsconfig": "workspace:*",
     "@types/node": "24.10.1",
     "@types/react": "19.3.0",
@@ -15,6 +16,7 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
+    "@elysiajs/eden": "1.4.9",
     "next": "16.4.6",
     "react": "19.3.1",
     "react-dom": "19.3.1"
