@@ -1,7 +1,7 @@
 import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
 import type { UserRow } from "../../db/schema.ts";
-import type { Actor } from "../auth/service.ts";
+import type { UserActor as Actor } from "../auth/service.ts";
 import type { UserKeyMaterial, UserRepository } from "./repository.ts";
 
 export function createUserService(dependencies: { users: UserRepository }) {

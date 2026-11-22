@@ -1,6 +1,7 @@
 import { Elysia } from "elysia";
 import type { Config } from "../../config.ts";
-import { authGuard } from "../../lib/auth-guard.ts";
+import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
+import { requireUser } from "../../lib/request-context.ts";
 import { AppError } from "../../lib/errors.ts";
 import { limitByIp } from "../../lib/rate-limit-hook.ts";
 import type { RateLimiter } from "../../lib/rate-limit.ts";
@@ -20,11 +21,12 @@ export type AuthRateLimiters = {
 
 type AuthRoutesDependencies = {
   auth: AuthService;
+  authenticate: Authenticate;
   config: Pick<Config, "environment" | "webUrl" | "trustProxy">;
   rateLimiters: AuthRateLimiters;
 };
 
-export function authRoutes({ auth, config, rateLimiters }: AuthRoutesDependencies) {
+export function authRoutes({ auth, authenticate, config, rateLimiters }: AuthRoutesDependencies) {
   const secure = config.environment === "production";
   const refreshCookie = {
     httpOnly: true,
@@ -120,17 +122,19 @@ export function authRoutes({ auth, config, rateLimiters }: AuthRoutesDependencie
         { body: RefreshBody, beforeHandle: limit(rateLimiters.refresh, "refresh") },
       )
       // Everything below needs a signed-in user.
-      .use(authGuard(auth, config.trustProxy))
+      .use(authGuard(authenticate, config.trustProxy))
       .post("/v1/auth/logout", async ({ actor, cookie, set }) => {
-        await auth.logout(actor);
+        await auth.logout(requireUser(actor));
         cookie[REFRESH_COOKIE]?.set({ value: "", ...refreshCookie, ...expired });
         set.status = 204;
       })
-      .get("/v1/me/sessions", async ({ actor }) => ({ items: await auth.listSessions(actor) }))
+      .get("/v1/me/sessions", async ({ actor }) => ({
+        items: await auth.listSessions(requireUser(actor)),
+      }))
       .delete(
         "/v1/me/sessions/:id",
         async ({ actor, params, set }) => {
-          await auth.revokeSession(actor, params.id);
+          await auth.revokeSession(requireUser(actor), params.id);
           set.status = 204;
         },
         { params: SessionIdParams },

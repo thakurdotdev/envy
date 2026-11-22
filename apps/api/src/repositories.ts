@@ -5,6 +5,7 @@ import { createEnvironmentRepository } from "./modules/environments/repository.t
 import { createMemberRepository } from "./modules/members/repository.ts";
 import { createProjectRepository } from "./modules/projects/repository.ts";
 import { createSecretRepository } from "./modules/secrets/repository.ts";
+import { createTokenRepository } from "./modules/tokens/repository.ts";
 import { createUserRepository } from "./modules/users/repository.ts";
 
 /** The repositories that services share, all running on the same executor. */
@@ -15,6 +16,7 @@ export function createRepositories(executor: Executor) {
     members: createMemberRepository(executor),
     projects: createProjectRepository(executor),
     secrets: createSecretRepository(executor),
+    tokens: createTokenRepository(executor),
     users: createUserRepository(executor),
   };
 }

@@ -1,17 +1,16 @@
 import { Elysia } from "elysia";
-import { authGuard } from "../../lib/auth-guard.ts";
-import type { AuthService } from "../auth/service.ts";
+import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { EnvironmentIdParams, PushSecretsBody, SecretsQuery, VersionsQuery } from "./schema.ts";
 import type { SecretService } from "./service.ts";
 
 export function secretRoutes(dependencies: {
-  auth: AuthService;
+  authenticate: Authenticate;
   secrets: SecretService;
   trustProxy: boolean;
 }) {
-  const { auth, secrets, trustProxy } = dependencies;
+  const { authenticate, secrets, trustProxy } = dependencies;
   return new Elysia()
-    .use(authGuard(auth, trustProxy))
+    .use(authGuard(authenticate, trustProxy))
     .get(
       "/v1/environments/:id/secrets",
       ({ context, params, query }) => secrets.getSecrets(context, params.id, query.version),

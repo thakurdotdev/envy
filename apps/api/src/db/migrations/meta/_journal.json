@@ -22,6 +22,13 @@
       "when": 1795342091163,
       "tag": "0002_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795343748138,
+      "tag": "0003_service_tokens",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import type { AccessChecker } from "../../lib/access.ts";
 import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import type { Clock } from "../../lib/clock.ts";
 import { AppError } from "../../lib/errors.ts";
-import type { RequestContext } from "../../lib/request-context.ts";
+import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 import { applyRotation, type EnvironmentRotation } from "../environments/rotation.ts";
@@ -76,7 +76,7 @@ export function createMemberService(dependencies: {
           projectId,
           email,
           role: input.role,
-          invitedBy: context.actor.userId,
+          invitedBy: requireUser(context.actor).userId,
           tokenHash: hashInviteToken(token),
           expiresAt: new Date(clock.now().getTime() + INVITE_LIFETIME_MS),
         });
@@ -107,7 +107,7 @@ export function createMemberService(dependencies: {
         throw inviteNotFound();
       }
       const project = await repositories.projects.findById(invite.projectId);
-      const user = await repositories.users.findById(context.actor.userId);
+      const user = await repositories.users.findById(requireUser(context.actor).userId);
       if (project === undefined || user === undefined) {
         throw inviteNotFound();
       }
@@ -205,7 +205,7 @@ export function createMemberService(dependencies: {
             recipientType: "user" as const,
             recipientId: member.userId,
             wrappedKey: key.wrappedKey,
-            createdBy: context.actor.userId,
+            createdBy: requireUser(context.actor).userId,
           })),
         );
         if (!(await transaction.members.activate(member.memberId))) {
@@ -281,7 +281,14 @@ export function createMemberService(dependencies: {
         for (const environment of environments) {
           const rotation = rotationFor.get(environment.id);
           if (rotation !== undefined) {
-            await applyRotation(transaction, context, environment, rotation, remaining);
+            await applyRotation(
+              transaction,
+              context,
+              environment,
+              rotation,
+              remaining,
+              clock.now(),
+            );
           }
         }
         await recordAuditEvent(transaction.audit, context, {

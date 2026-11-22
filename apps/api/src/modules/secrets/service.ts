@@ -4,7 +4,7 @@ import type { AccessChecker } from "../../lib/access.ts";
 import { assertBase64UrlBytes, base64UrlByteLength, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
 import { DEFAULT_PAGE_SIZE, toPage } from "../../lib/pagination.ts";
-import type { RequestContext } from "../../lib/request-context.ts";
+import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 
@@ -90,7 +90,7 @@ export function createSecretService(dependencies: {
             keyVersion: input.keyVersion,
             ciphertext: input.ciphertext,
             nonce: input.nonce,
-            authorId: context.actor.userId,
+            authorId: requireUser(context.actor).userId,
             message: input.message ?? null,
           });
           await recordAuditEvent(transaction.audit, context, {

@@ -1,18 +1,17 @@
 import { Elysia } from "elysia";
-import { authGuard } from "../../lib/auth-guard.ts";
+import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { IdCursorQuery } from "../../lib/pagination.ts";
-import type { AuthService } from "../auth/service.ts";
 import { CreateProjectBody, ProjectIdParams, RenameProjectBody } from "./schema.ts";
 import type { ProjectService } from "./service.ts";
 
 export function projectRoutes(dependencies: {
-  auth: AuthService;
+  authenticate: Authenticate;
   projects: ProjectService;
   trustProxy: boolean;
 }) {
-  const { auth, projects, trustProxy } = dependencies;
+  const { authenticate, projects, trustProxy } = dependencies;
   return new Elysia()
-    .use(authGuard(auth, trustProxy))
+    .use(authGuard(authenticate, trustProxy))
     .get("/v1/projects", ({ context, query }) => projects.listProjects(context, query), {
       query: IdCursorQuery,
     })

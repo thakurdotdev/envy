@@ -2,7 +2,7 @@ import type { EnvironmentRow, MemberRole } from "../db/schema.ts";
 import type { EnvironmentRepository } from "../modules/environments/repository.ts";
 import type { MemberRepository } from "../modules/members/repository.ts";
 import { AppError } from "./errors.ts";
-import type { RequestContext } from "./request-context.ts";
+import { requireUser, type RequestContext } from "./request-context.ts";
 
 // Each role can do everything the roles below it can.
 const ROLE_RANK: Record<MemberRole, number> = { viewer: 0, member: 1, admin: 2, owner: 3 };
@@ -46,7 +46,9 @@ export function createAccessChecker(repositories: {
     minimumRole: MemberRole,
     notFound: () => AppError = projectNotFound,
   ): Promise<MemberRole> {
-    const role = await repositories.members.findActiveRole(projectId, context.actor.userId);
+    // Service tokens never act at project level; they only read their environment.
+    const user = requireUser(context.actor);
+    const role = await repositories.members.findActiveRole(projectId, user.userId);
     if (role === undefined) {
       throw notFound();
     }
@@ -68,6 +70,17 @@ export function createAccessChecker(repositories: {
       const environment = await repositories.environments.findById(environmentId);
       if (environment === undefined) {
         throw environmentNotFound();
+      }
+      const actor = context.actor;
+      if (actor.type === "token") {
+        // A token sees exactly one environment, and only to read it.
+        if (actor.environmentId !== environment.id) {
+          throw environmentNotFound();
+        }
+        if (minimumRole !== "viewer") {
+          requireUser(actor);
+        }
+        return environment;
       }
       await assertRole(context, environment.projectId, minimumRole, environmentNotFound);
       return environment;

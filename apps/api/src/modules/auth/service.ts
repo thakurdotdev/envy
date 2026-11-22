@@ -24,8 +24,17 @@ export type AuthServiceDependencies = {
   users: UserRepository;
 };
 
-/** Who is making a request. Service tokens join this in Phase 7. */
-export type Actor = { type: "user"; userId: string; sessionId: string };
+/** A signed-in person. */
+export type UserActor = { type: "user"; userId: string; sessionId: string };
+/** A CI service token: may only read one environment. */
+export type TokenActor = {
+  type: "token";
+  tokenId: string;
+  projectId: string;
+  environmentId: string;
+};
+/** Who is making a request. */
+export type Actor = UserActor | TokenActor;
 
 export type SignedInSession = {
   accessToken: string;
@@ -172,7 +181,7 @@ export function createAuthService(dependencies: AuthServiceDependencies) {
     },
 
     /** Checks the Authorization header and the session behind it. */
-    async authenticate(authorizationHeader: string | undefined): Promise<Actor> {
+    async authenticate(authorizationHeader: string | undefined): Promise<UserActor> {
       const token = authorizationHeader?.match(/^Bearer (\S+)$/)?.[1];
       if (token === undefined) {
         throw new AppError("NOT_AUTHENTICATED", "Sign in first.", 401);
@@ -190,11 +199,11 @@ export function createAuthService(dependencies: AuthServiceDependencies) {
       return { type: "user", userId: claims.userId, sessionId: claims.sessionId };
     },
 
-    async logout(actor: Actor): Promise<void> {
+    async logout(actor: UserActor): Promise<void> {
       await sessions.revoke(actor.sessionId, clock.now());
     },
 
-    async listSessions(actor: Actor) {
+    async listSessions(actor: UserActor) {
       const active = await sessions.listActiveForUser(actor.userId, clock.now());
       return active.map((session) => ({
         id: session.id,
@@ -207,7 +216,7 @@ export function createAuthService(dependencies: AuthServiceDependencies) {
       }));
     },
 
-    async revokeSession(actor: Actor, sessionId: string): Promise<void> {
+    async revokeSession(actor: UserActor, sessionId: string): Promise<void> {
       const session = await sessions.findById(sessionId);
       // Someone else's session looks exactly like a missing one.
       if (session === undefined || session.userId !== actor.userId || session.revokedAt !== null) {

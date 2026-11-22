@@ -1,6 +1,5 @@
 import { Elysia } from "elysia";
-import { authGuard } from "../../lib/auth-guard.ts";
-import type { AuthService } from "../auth/service.ts";
+import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import {
   ChangeRoleBody,
   GrantBody,
@@ -13,13 +12,13 @@ import {
 import type { MemberService } from "./service.ts";
 
 export function memberRoutes(dependencies: {
-  auth: AuthService;
+  authenticate: Authenticate;
   members: MemberService;
   trustProxy: boolean;
 }) {
-  const { auth, members, trustProxy } = dependencies;
+  const { authenticate, members, trustProxy } = dependencies;
   return new Elysia()
-    .use(authGuard(auth, trustProxy))
+    .use(authGuard(authenticate, trustProxy))
     .get(
       "/v1/projects/:id/members",
       ({ context, params }) => members.listMembers(context, params.id),

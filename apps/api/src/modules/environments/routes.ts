@@ -1,19 +1,18 @@
 import { Elysia } from "elysia";
-import { authGuard } from "../../lib/auth-guard.ts";
-import type { AuthService } from "../auth/service.ts";
+import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { RotationSchema } from "../members/schema.ts";
 import { CreateEnvironmentBody, EnvironmentIdParams, KeyQuery, ProjectIdParams } from "./schema.ts";
 import { t } from "elysia";
 import type { EnvironmentService } from "./service.ts";
 
 export function environmentRoutes(dependencies: {
-  auth: AuthService;
+  authenticate: Authenticate;
   environments: EnvironmentService;
   trustProxy: boolean;
 }) {
-  const { auth, environments, trustProxy } = dependencies;
+  const { authenticate, environments, trustProxy } = dependencies;
   return new Elysia()
-    .use(authGuard(auth, trustProxy))
+    .use(authGuard(authenticate, trustProxy))
     .get(
       "/v1/projects/:id/environments",
       ({ context, params }) => environments.listEnvironments(context, params.id),

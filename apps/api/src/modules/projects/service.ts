@@ -5,7 +5,7 @@ import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import type { Clock } from "../../lib/clock.ts";
 import { AppError } from "../../lib/errors.ts";
 import { DEFAULT_PAGE_SIZE, toPage } from "../../lib/pagination.ts";
-import type { RequestContext } from "../../lib/request-context.ts";
+import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 
@@ -42,7 +42,7 @@ export function createProjectService(dependencies: {
           `environmentKeys.${environment.name}`,
         );
       }
-      const ownerId = context.actor.userId;
+      const ownerId = requireUser(context.actor).userId;
       const slug = input.slug ?? makeSlug(input.name);
       try {
         const project = await runInTransaction(async (transaction) => {
@@ -97,7 +97,7 @@ export function createProjectService(dependencies: {
     ) {
       const limit = page.limit ?? DEFAULT_PAGE_SIZE;
       const rows = await repositories.projects.listForUser({
-        userId: context.actor.userId,
+        userId: requireUser(context.actor).userId,
         beforeId: page.cursor,
         limit: limit + 1,
       });

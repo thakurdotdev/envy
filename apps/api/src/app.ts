@@ -25,6 +25,9 @@ import { createSecretService } from "./modules/secrets/service.ts";
 import { createRepositories, createRunInTransaction } from "./repositories.ts";
 import { memberRoutes } from "./modules/members/routes.ts";
 import { createMemberService } from "./modules/members/service.ts";
+import { tokenRoutes } from "./modules/tokens/routes.ts";
+import { createTokenService } from "./modules/tokens/service.ts";
+import type { Authenticate } from "./lib/auth-guard.ts";
 
 /** Everything the API needs from outside. Tests pass their own versions. */
 export type AppDependencies = {
@@ -59,7 +62,7 @@ export function createApp(dependencies: AppDependencies) {
   const runInTransaction = createRunInTransaction(database);
   const access = createAccessChecker(repositories);
   const projects = createProjectService({ repositories, runInTransaction, access, clock });
-  const environments = createEnvironmentService({ repositories, runInTransaction, access });
+  const environments = createEnvironmentService({ repositories, runInTransaction, access, clock });
   const secrets = createSecretService({ repositories, runInTransaction, access });
   const audit = createAuditService({ audit: repositories.audit, access });
   const members = createMemberService({
@@ -70,6 +73,12 @@ export function createApp(dependencies: AppDependencies) {
     webUrl: config.webUrl,
   });
   const { trustProxy } = config;
+  const tokens = createTokenService({ repositories, runInTransaction, access, clock });
+  // Service tokens start with "envy_"; everything else is a user's access token.
+  const authenticate: Authenticate = (header) =>
+    header?.startsWith("Bearer envy_") === true
+      ? tokens.authenticate(header)
+      : auth.authenticate(header);
 
   // The CLI polls about every 5 seconds while the user approves the sign-in.
   const rateLimiters = {
@@ -83,13 +92,14 @@ export function createApp(dependencies: AppDependencies) {
     .use(httpBasics(logger))
     .use(cors({ origin: config.webUrl, credentials: true }))
     .get("/health", () => ({ status: "ok" as const }))
-    .use(authRoutes({ auth, config, rateLimiters }))
-    .use(userRoutes({ auth, users, trustProxy }))
-    .use(projectRoutes({ auth, projects, trustProxy }))
-    .use(environmentRoutes({ auth, environments, trustProxy }))
-    .use(secretRoutes({ auth, secrets, trustProxy }))
-    .use(memberRoutes({ auth, members, trustProxy }))
-    .use(auditRoutes({ auth, audit, trustProxy }));
+    .use(authRoutes({ auth, authenticate, config, rateLimiters }))
+    .use(userRoutes({ authenticate, users, trustProxy }))
+    .use(projectRoutes({ authenticate, projects, trustProxy }))
+    .use(environmentRoutes({ authenticate, environments, trustProxy }))
+    .use(secretRoutes({ authenticate, secrets, trustProxy }))
+    .use(memberRoutes({ authenticate, members, trustProxy }))
+    .use(tokenRoutes({ authenticate, tokens, trustProxy }))
+    .use(auditRoutes({ authenticate, audit, trustProxy }));
 }
 
 /** The API's type. The CLI and web import only this, through Eden Treaty. */
