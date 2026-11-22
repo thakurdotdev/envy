@@ -18,21 +18,25 @@ export function CopyCommand({ command, className }: { command: string; className
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg border bg-muted/40 py-1.5 pr-1.5 pl-3 font-mono text-[13px]",
+        "flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3.5 font-mono text-sm shadow-xs",
         className,
       )}
     >
-      <span aria-hidden className="text-muted-foreground select-none">
+      <span aria-hidden className="py-1 text-muted-foreground select-none">
         $
       </span>
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap">{command}</code>
+      {/* One line on every screen: a long command scrolls sideways instead of breaking mid-word. */}
+      <code className="scrollbar-none min-w-0 flex-1 overflow-x-auto py-1 whitespace-nowrap">
+        {command}
+      </code>
       <Button
         variant="ghost"
         size="icon-sm"
+        className="shrink-0 text-muted-foreground"
         onClick={() => void copy()}
         aria-label={copied ? "Copied" : "Copy command"}
       >
-        {copied ? <Check /> : <Copy />}
+        {copied ? <Check className="text-success" /> : <Copy />}
       </Button>
     </div>
   );
