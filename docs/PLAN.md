@@ -381,16 +381,28 @@ Open questions:
 
 Goal: `packages/crypto` implements every function in the Security section, fully tested, with no I/O.
 
-- [ ] Lazy libsodium init helper (`await ready()`)
-- [ ] Master key derivation with stored KDF params
-- [ ] User keypair, private key encrypt/decrypt, recovery key
-- [ ] Env key generate, wrap, unwrap
-- [ ] Secrets encrypt/decrypt with AAD and format version byte
-- [ ] Key fingerprint (short, human-comparable)
-- [ ] Dotenv parser and serializer in `packages/shared` (quotes, multiline, comments, export prefix) with round-trip tests
-- [ ] docs/threat-model.md
+- [x] Lazy libsodium init helper (`await ready()`)
+- [x] Master key derivation with stored KDF params
+- [x] User keypair, private key encrypt/decrypt, recovery key
+- [x] Env key generate, wrap, unwrap
+- [x] Secrets encrypt/decrypt with AAD and format version byte
+- [x] Key fingerprint (short, human-comparable)
+- [x] Dotenv parser and serializer in `packages/shared` (quotes, multiline, comments, export prefix) with round-trip tests
+- [x] docs/threat-model.md
 
 Done when: tests cover round trips, wrong key, wrong AAD, tampered ciphertext, tampered nonce and old format versions — all fail safely with typed errors. No function logs anything.
+
+#### Phase 1 summary (2026-11-22)
+
+Built:
+
+- `packages/crypto`: every function from the Security section, plus `generateSalt`, `getPublicKey`, `parseRecoveryKey`, `clearKey` and base64url helpers. 40 tests cover round trips, wrong keys, wrong AAD (swapped project, environment, version, key version), tampered ciphertext and nonces, unknown format versions, fixed version 1 test vectors, and a check that nothing is logged.
+- `packages/shared`: `.env` parser and writer with a fixture file and round-trip tests (fixture, awkward values, random values).
+- `docs/threat-model.md`, ADR 0005 (crypto details).
+
+Skipped: nothing.
+
+Open questions: none.
 
 ### Phase 2 — API core: auth and users
 
