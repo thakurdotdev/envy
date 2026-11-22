@@ -325,16 +325,16 @@ export function SecretEditor({
               importText(text, "the clipboard");
             }
           }}
-          className="flex w-full flex-col items-center rounded-xl border border-dashed px-4 py-10 text-center transition-colors hover:bg-muted/30"
+          className="flex w-full flex-col items-center rounded-lg border border-dashed bg-card/50 px-4 py-12 text-center transition-colors hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <span className="flex size-10 items-center justify-center rounded-lg border bg-card text-muted-foreground shadow-xs">
             <KeyRound className="size-5" />
           </span>
           <span className="mt-3 text-sm font-medium">{environment.name} has no variables yet</span>
           <span className="mt-1 max-w-sm text-sm text-muted-foreground">
             Add one, paste a whole .env file into any field, or drop a .env file here.
           </span>
-          <span className="mt-4 inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-sm font-medium">
+          <span className="mt-5 inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-medium shadow-xs">
             <Plus className="size-4" /> Add variable
           </span>
         </button>
@@ -362,17 +362,19 @@ export function SecretEditor({
           />
           {search !== "" && visibleRows.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
-              No variables match “{query}”.
+              No variables match &quot;{query}&quot;.
             </p>
           ) : null}
           {canEdit ? (
             <button
               type="button"
               onClick={addRow}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-2.5 text-sm text-muted-foreground transition-colors hover:border-input hover:bg-muted/40 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <Plus className="size-4" /> Add another
-              <span className="hidden sm:inline">· or paste a .env file into any field</span>
+              <span className="hidden text-muted-foreground/80 sm:inline">
+                or paste a .env file into any field
+              </span>
             </button>
           ) : null}
         </>
@@ -402,9 +404,11 @@ export function SecretEditor({
       {canEdit && (rows.length > 0 || isDirty) ? (
         <div
           className={cn(
-            "flex flex-wrap items-center gap-2 border-t pt-3",
+            "flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2",
             // While there is something to save, the bar stays in view on long lists.
-            isDirty && "sticky bottom-0 z-10 -mx-4 bg-background/95 px-4 pb-3 backdrop-blur",
+            isDirty
+              ? "sticky bottom-3 z-10 bg-card/95 shadow-md backdrop-blur"
+              : "border-transparent px-1",
           )}
         >
           <span
@@ -415,7 +419,7 @@ export function SecretEditor({
             aria-live="polite"
           >
             {isDirty && problem === undefined ? (
-              <span className="size-2 rounded-full bg-amber-500" aria-hidden />
+              <span className="size-2 rounded-full bg-brand" aria-hidden />
             ) : null}
             {mode === "env" && rawError !== undefined
               ? "Fix the .env text above to save."

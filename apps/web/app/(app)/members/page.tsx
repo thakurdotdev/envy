@@ -3,10 +3,12 @@
 import { fingerprint, fromBase64Url } from "@envy/crypto";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { SectionTitle } from "@/components/app-shell";
+import { SectionHeader } from "@/components/page-header";
 import { CopyButton } from "@/components/copy-button";
 import { isAdminRole, ProjectFrame, type ProjectInfo } from "@/components/project-frame";
 import { LoadError, LoadingRows } from "@/components/states";
+import { RoleBadge, StatusBadge } from "@/components/status-badge";
+import { TableFrame } from "@/components/table-frame";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -16,9 +18,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -87,7 +95,7 @@ function Members({ project }: { project: ProjectInfo }) {
   return (
     <div className="space-y-10">
       <section aria-labelledby="members-heading">
-        <SectionTitle
+        <SectionHeader
           id="members-heading"
           title="Members"
           description={
@@ -96,31 +104,33 @@ function Members({ project }: { project: ProjectInfo }) {
               : "Compare key fingerprints with teammates in person or on a call: if they match, nobody (not even the server) swapped a key."
           }
         />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Member</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead className="hidden md:table-cell">Key fingerprint</TableHead>
-              <TableHead>
-                <span className="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {members.map((member) => (
-              <MemberRow
-                key={member.id}
-                member={member}
-                everyone={members}
-                projectId={project.id}
-                isYou={member.userId === profile.id}
-                canManage={isAdmin && member.role !== "owner"}
-                onChanged={reload}
-              />
-            ))}
-          </TableBody>
-        </Table>
+        <TableFrame>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="hidden md:table-cell">Key fingerprint</TableHead>
+                <TableHead>
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {members.map((member) => (
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  everyone={members}
+                  projectId={project.id}
+                  isYou={member.userId === profile.id}
+                  canManage={isAdmin && member.role !== "owner"}
+                  onChanged={reload}
+                />
+              ))}
+            </TableBody>
+          </Table>
+        </TableFrame>
       </section>
       {isAdmin ? <InviteForm projectId={project.id} onInvited={reload} /> : null}
     </div>
@@ -213,7 +223,9 @@ function MemberRow({
         </div>
         <div className="text-sm text-muted-foreground">{member.email}</div>
         {/* On narrow screens the fingerprint sits here instead of in its own column. */}
-        <div className="mt-1 font-mono text-xs text-muted-foreground md:hidden">{code}</div>
+        <div className="mt-1 font-mono text-xs tracking-wide text-muted-foreground md:hidden">
+          {code}
+        </div>
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap items-center gap-2">
@@ -235,19 +247,14 @@ function MemberRow({
               </SelectContent>
             </Select>
           ) : (
-            <Badge variant="secondary">{member.role}</Badge>
+            <RoleBadge role={member.role} />
           )}
           {member.status === "pending" ? (
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 text-amber-700 dark:text-amber-300"
-            >
-              waiting for access
-            </Badge>
+            <StatusBadge tone="warning">waiting for access</StatusBadge>
           ) : null}
         </div>
       </TableCell>
-      <TableCell className="hidden font-mono text-sm whitespace-nowrap md:table-cell">
+      <TableCell className="hidden font-mono text-sm tracking-wide whitespace-nowrap text-muted-foreground md:table-cell">
         {code}
       </TableCell>
       <TableCell>
@@ -286,7 +293,7 @@ function MemberRow({
                     Ask {who} to read you the fingerprint shown when they accepted the invite. It
                     must be exactly:
                   </p>
-                  <p className="rounded-md border bg-muted px-3 py-2 text-center font-mono text-base tracking-wider text-foreground">
+                  <p className="rounded-md bg-code px-3 py-2.5 text-center font-mono text-base tracking-wider text-code-foreground">
                     {code}
                   </p>
                   <p>If it is different, do not continue: someone may have swapped their key.</p>
@@ -313,13 +320,7 @@ function MemberRow({
               onClick={() => void (confirm === "grant" ? grant() : remove())}
             >
               {busy ? <Spinner /> : null}
-              {confirm === "grant"
-                ? busy
-                  ? "Giving access…"
-                  : "It matches, give access"
-                : busy
-                  ? "Changing keys…"
-                  : "Remove and change keys"}
+              {confirm === "grant" ? "It matches, give access" : "Remove and change keys"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -354,80 +355,84 @@ function InviteForm({ projectId, onInvited }: { projectId: string; onInvited: ()
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Invite someone</CardTitle>
-        <CardDescription>
-          You get a link to send them. It works once, for 7 days, and only for the GitHub account
-          with this email.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={(event) => void submit(event)} className="flex flex-wrap items-end gap-3">
-          <div className="min-w-56 flex-1 space-y-2">
-            <Label htmlFor="invite-email">Email</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              placeholder="teammate@example.com"
-              autoComplete="off"
-              required
-              value={email}
-              aria-invalid={error !== undefined}
-              aria-describedby={error === undefined ? undefined : "invite-error"}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="invite-role">Role</Label>
-            <Select
-              value={role}
-              onValueChange={(value) => (isAssignableRole(value) ? setRole(value) : undefined)}
-            >
-              <SelectTrigger id="invite-role" className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((option) => (
-                  <SelectItem key={option} value={option} title={ROLE_HELP[option]}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button type="submit" disabled={busy || email.trim() === ""}>
-            {busy ? <Spinner /> : null}
-            {busy ? "Inviting…" : "Invite"}
-          </Button>
-        </form>
-        <p className="text-xs text-muted-foreground">{ROLE_HELP[role]}.</p>
-        {error === undefined ? null : (
-          <p id="invite-error" role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        {invite === undefined ? null : (
-          <div className="space-y-2 rounded-lg border bg-muted/40 p-3" aria-live="polite">
-            <p className="text-sm">
-              Send this link to <span className="font-medium">{invite.email}</span>. When they
-              accept, they show up above as waiting for access.
-            </p>
-            <div className="flex gap-2">
+    <form onSubmit={(event) => void submit(event)}>
+      <Card className="gap-5">
+        <CardHeader>
+          <CardTitle>Invite someone</CardTitle>
+          <CardDescription>
+            You get a link to send them. It works once, for 7 days, and only for the GitHub account
+            with this email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-56 flex-1 space-y-2">
+              <Label htmlFor="invite-email">Email</Label>
               <Input
-                readOnly
-                value={invite.url}
-                aria-label="Invite link"
-                className="font-mono text-xs"
-                onFocus={(event) => event.target.select()}
+                id="invite-email"
+                type="email"
+                placeholder="teammate@example.com"
+                autoComplete="off"
+                required
+                value={email}
+                aria-invalid={error !== undefined}
+                aria-describedby={error === undefined ? undefined : "invite-error"}
+                onChange={(event) => setEmail(event.target.value)}
               />
-              <CopyButton text={invite.url} label="invite link">
-                Copy link
-              </CopyButton>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Role</Label>
+              <Select
+                value={role}
+                onValueChange={(value) => (isAssignableRole(value) ? setRole(value) : undefined)}
+              >
+                <SelectTrigger id="invite-role" className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((option) => (
+                    <SelectItem key={option} value={option} title={ROLE_HELP[option]}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          {error === undefined ? null : (
+            <p id="invite-error" role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          {invite === undefined ? null : (
+            <div className="space-y-2 rounded-lg border bg-muted/40 p-3" aria-live="polite">
+              <p className="text-sm">
+                Send this link to <span className="font-medium">{invite.email}</span>. When they
+                accept, they show up above as waiting for access.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={invite.url}
+                  aria-label="Invite link"
+                  className="bg-card font-mono text-xs"
+                  onFocus={(event) => event.target.select()}
+                />
+                <CopyButton text={invite.url} label="invite link">
+                  Copy link
+                </CopyButton>
+              </div>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="flex-wrap justify-between gap-3">
+          <p className="text-xs text-muted-foreground">{ROLE_HELP[role]}.</p>
+          <Button type="submit" disabled={busy || email.trim() === ""}>
+            {busy ? <Spinner /> : null}
+            Invite
+          </Button>
+        </CardFooter>
+      </Card>
+    </form>
   );
 }

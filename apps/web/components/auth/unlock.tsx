@@ -75,13 +75,8 @@ export function Unlock({ githubLogin }: { githubLogin: string }) {
           )}
         </div>
         <Button type="submit" size="lg" className="h-10 w-full" disabled={busy || password === ""}>
-          {busy ? (
-            <>
-              <Spinner /> Unlocking…
-            </>
-          ) : (
-            "Unlock"
-          )}
+          {busy ? <Spinner /> : null}
+          Unlock
         </Button>
       </form>
     </AuthLayout>

@@ -12,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -27,7 +26,10 @@ import { useLoad } from "@/hooks/use-load";
 import { ApiError, call, errorMessage } from "@/lib/api";
 import { diffKeys, pullEnvironment, pushEnvironment, type EnvironmentSummary } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
+import { DiffLine, diffLines } from "./diff-line";
 import { EmptyState, LoadError, LoadingRows } from "./states";
+import { StatusBadge } from "./status-badge";
+import { TableFrame } from "./table-frame";
 import { TimeAgo } from "./time-ago";
 
 type Comparison = {
@@ -122,61 +124,63 @@ export function HistoryPanel({
   const latest = state.data.items[0]?.version;
   return (
     <div className="space-y-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Version</TableHead>
-            <TableHead>When</TableHead>
-            <TableHead>Who</TableHead>
-            <TableHead>Note</TableHead>
-            <TableHead>
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {state.data.items.map((item) => (
-            <TableRow
-              key={item.version}
-              data-state={comparison?.version === item.version ? "selected" : undefined}
-            >
-              <TableCell className="font-mono">
-                v{item.version}
-                {item.version === latest ? (
-                  <Badge variant="secondary" className="ml-2 font-sans">
-                    current
-                  </Badge>
-                ) : null}
-              </TableCell>
-              <TableCell>
-                <TimeAgo value={item.createdAt} />
-              </TableCell>
-              <TableCell>@{item.author.githubLogin}</TableCell>
-              <TableCell
-                className="max-w-64 truncate text-muted-foreground"
-                title={item.message ?? undefined}
-              >
-                {item.message ?? ""}
-              </TableCell>
-              <TableCell className="text-right">
-                {item.version === latest ? null : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={comparing !== undefined}
-                    onClick={() => void compare(item.version)}
-                  >
-                    {comparing === item.version ? <Spinner /> : null}
-                    Compare
-                  </Button>
-                )}
-              </TableCell>
+      <TableFrame>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Version</TableHead>
+              <TableHead>When</TableHead>
+              <TableHead>Who</TableHead>
+              <TableHead>Note</TableHead>
+              <TableHead>
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {state.data.items.map((item) => (
+              <TableRow
+                key={item.version}
+                data-state={comparison?.version === item.version ? "selected" : undefined}
+              >
+                <TableCell className="font-mono text-sm">
+                  v{item.version}
+                  {item.version === latest ? (
+                    <StatusBadge tone="success" className="ml-2 font-sans">
+                      current
+                    </StatusBadge>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  <TimeAgo value={item.createdAt} />
+                </TableCell>
+                <TableCell>@{item.author.githubLogin}</TableCell>
+                <TableCell
+                  className="max-w-64 truncate text-muted-foreground"
+                  title={item.message ?? undefined}
+                >
+                  {item.message ?? ""}
+                </TableCell>
+                <TableCell className="text-right">
+                  {item.version === latest ? null : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={comparing !== undefined}
+                      onClick={() => void compare(item.version)}
+                    >
+                      {comparing === item.version ? <Spinner /> : null}
+                      Compare
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableFrame>
       {comparison === undefined ? null : (
-        <div className="rounded-lg border p-4" aria-live="polite">
+        <div className="rounded-lg border bg-card p-4 shadow-xs" aria-live="polite">
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm font-medium">
               Going back to version {comparison.version} would change:
@@ -217,7 +221,7 @@ export function HistoryPanel({
               onClick={() => (comparison === undefined ? undefined : void rollBack(comparison))}
             >
               {rollingBack ? <Spinner /> : null}
-              {rollingBack ? "Rolling back…" : "Roll back"}
+              Roll back
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -227,24 +231,14 @@ export function HistoryPanel({
 }
 
 function DiffList({ diff }: { diff: Comparison["diff"] }) {
-  const lines = [
-    ...diff.added.map((key) => ({
-      key,
-      mark: "+",
-      tone: "text-emerald-600 dark:text-emerald-400",
-    })),
-    ...diff.changed.map((key) => ({ key, mark: "~", tone: "text-amber-600 dark:text-amber-300" })),
-    ...diff.removed.map((key) => ({ key, mark: "−", tone: "text-destructive" })),
-  ];
+  const lines = diffLines(diff);
   if (lines.length === 0) {
     return <p className="mt-2 text-sm text-muted-foreground">Nothing: it is the same as now.</p>;
   }
   return (
-    <ul aria-label="Changes" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[13px]">
+    <ul aria-label="Changes" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-sm">
       {lines.map((line) => (
-        <li key={line.key} className={line.tone}>
-          {line.mark} {line.key}
-        </li>
+        <DiffLine key={line.key} name={line.key} kind={line.kind} />
       ))}
     </ul>
   );

@@ -2,15 +2,19 @@
 
 import { AlertCircle, Eye, EyeOff, Trash2 } from "lucide-react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { rowProblem, rowStatus, type Row } from "@/lib/env-rows";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button";
+import { StatusBadge } from "./status-badge";
 
-const GRID = "sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]";
+const GRID = "sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_6rem]";
+
+// Inputs inside the table look like plain cells until hovered or focused.
+const CELL_INPUT =
+  "border-transparent bg-transparent font-mono text-sm shadow-none hover:border-input focus-visible:bg-background dark:bg-transparent read-only:hover:border-transparent";
 
 export type RowHandlers = {
   update: (id: number, change: Partial<Row>) => void;
@@ -40,18 +44,18 @@ export function EnvTable({
   handlers: RowHandlers;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="overflow-hidden rounded-lg border bg-card shadow-xs">
       <div
         className={cn(
-          "hidden gap-2 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase sm:grid",
+          "hidden gap-2 border-b border-l-2 border-l-transparent bg-muted/40 py-2 pr-2 pl-3 text-xs font-medium text-muted-foreground sm:grid",
           GRID,
         )}
       >
-        <span>Name</span>
-        <span>Value</span>
-        <span className="w-[6.75rem]" />
+        <span className="px-2.5">Name</span>
+        <span className="px-2.5">Value</span>
+        <span className="sr-only">Actions</span>
       </div>
-      <ul className="space-y-2">
+      <ul className="divide-y">
         {visibleRows.map((row) => (
           <EnvRow
             key={row.id}
@@ -100,9 +104,10 @@ function EnvRow({
   return (
     <li
       className={cn(
-        "rounded-lg border p-2 sm:border-0 sm:p-0",
-        status === "new" && "border-l-2 border-l-emerald-500 sm:border-l-0",
-        status === "edited" && "border-l-2 border-l-amber-500 sm:border-l-0",
+        "border-l-2 py-2 pr-2 pl-2 transition-colors hover:bg-muted/30 sm:py-1.5 sm:pl-3",
+        status === "new" && "border-l-success",
+        status === "edited" && "border-l-warning",
+        status === undefined && "border-l-transparent",
       )}
     >
       <div className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2", GRID)}>
@@ -110,7 +115,7 @@ function EnvRow({
           <Input
             aria-label="Variable name"
             aria-invalid={problem !== undefined}
-            className={cn("font-mono text-[13px]", status !== undefined && "pr-16")}
+            className={cn(CELL_INPUT, "font-medium", status !== undefined && "pr-20")}
             placeholder="VARIABLE_NAME"
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- the user just pressed "Add"
             autoFocus={autoFocus}
@@ -128,17 +133,12 @@ function EnvRow({
             }}
           />
           {status === undefined ? null : (
-            <Badge
-              variant="outline"
-              className={cn(
-                "pointer-events-none absolute top-1/2 right-2 -translate-y-1/2",
-                status === "new"
-                  ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-                  : "border-amber-500/30 text-amber-700 dark:text-amber-300",
-              )}
+            <StatusBadge
+              tone={status === "new" ? "success" : "warning"}
+              className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 bg-card"
             >
               {status}
-            </Badge>
+            </StatusBadge>
           )}
         </div>
         <ValueField
@@ -149,7 +149,7 @@ function EnvRow({
           handlers={handlers}
           onKeyDown={onValueKeyDown}
         />
-        <div className="flex">
+        <div className="flex justify-end">
           <Button
             variant="ghost"
             size="icon"
@@ -180,7 +180,7 @@ function EnvRow({
         </div>
       </div>
       {problem === undefined ? null : (
-        <p className="mt-1 flex items-center gap-1 px-1 text-xs text-destructive">
+        <p className="mt-1 flex items-center gap-1 px-2.5 text-xs text-destructive">
           <AlertCircle className="size-3" /> {problem}
         </p>
       )}
@@ -210,7 +210,7 @@ function ValueField({
         type="button"
         aria-label={valueLabel}
         onClick={() => handlers.update(row.id, { revealed: true })}
-        className="flex h-8 items-center gap-2 rounded-lg border bg-muted/40 px-2.5 text-left font-mono text-[13px] text-muted-foreground hover:text-foreground"
+        className="flex h-8 items-center gap-2 rounded-lg border border-dashed px-2.5 text-left font-mono text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         •••••• <span className="font-sans text-xs">{lineCount} lines, click to show</span>
       </button>
@@ -220,7 +220,7 @@ function ValueField({
     return (
       <Textarea
         aria-label={valueLabel}
-        className="min-h-8 font-mono text-[13px]"
+        className="min-h-8 font-mono text-sm"
         rows={Math.min(8, lineCount)}
         value={row.value}
         readOnly={!canEdit}
@@ -233,7 +233,7 @@ function ValueField({
   return (
     <Input
       aria-label={valueLabel}
-      className="font-mono text-[13px]"
+      className={CELL_INPUT}
       type={row.revealed ? "text" : "password"}
       placeholder="value"
       autoComplete="off"

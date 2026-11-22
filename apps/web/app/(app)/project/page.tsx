@@ -2,7 +2,7 @@
 
 import { Lock } from "lucide-react";
 import { Suspense, useCallback, useState } from "react";
-import { SectionTitle } from "@/components/app-shell";
+import { SectionHeader } from "@/components/page-header";
 import { HistoryPanel } from "@/components/history-panel";
 import { ProjectFrame, type ProjectInfo } from "@/components/project-frame";
 import { SecretEditor } from "@/components/secret-editor";
@@ -66,17 +66,17 @@ function Environments({ project }: { project: ProjectInfo }) {
         setSelected(environmentId);
       }}
     >
-      <div className="-mx-4 overflow-x-auto px-4 pb-1">
-        <TabsList aria-label="Environments">
+      <div className="scrollbar-none -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <TabsList aria-label="Environments" className="h-9 border bg-muted/60">
           {environments.map((environment) => (
-            <TabsTrigger key={environment.id} value={environment.id} className="px-2.5">
+            <TabsTrigger key={environment.id} value={environment.id} className="px-3">
               {environment.isProtected ? (
                 <Lock aria-label="protected" className="text-muted-foreground" />
               ) : null}
               {environment.name}
               {dirty[environment.id] === true ? (
                 <span
-                  className="size-1.5 rounded-full bg-amber-500"
+                  className="size-1.5 rounded-full bg-brand"
                   role="img"
                   aria-label="unsaved changes"
                 />
@@ -92,7 +92,7 @@ function Environments({ project }: { project: ProjectInfo }) {
             key={environment.id}
             value={environment.id}
             forceMount
-            className="mt-4 space-y-10 data-[state=inactive]:hidden"
+            className="mt-5 space-y-12 data-[state=inactive]:hidden"
           >
             <section aria-label={`${environment.name} variables`}>
               <SecretEditor
@@ -106,7 +106,7 @@ function Environments({ project }: { project: ProjectInfo }) {
               />
             </section>
             <section aria-labelledby={`history-${environment.id}`}>
-              <SectionTitle
+              <SectionHeader
                 id={`history-${environment.id}`}
                 title="History"
                 description="Every save is a new version. Compare one to see which names it changes."

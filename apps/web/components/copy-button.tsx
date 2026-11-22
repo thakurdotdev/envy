@@ -38,7 +38,7 @@ export function CopyButton({
     }
   }
 
-  const icon = copied ? <Check className="text-emerald-600 dark:text-emerald-400" /> : <Copy />;
+  const icon = copied ? <Check className="text-success" /> : <Copy />;
   return (
     <Button
       variant="outline"
