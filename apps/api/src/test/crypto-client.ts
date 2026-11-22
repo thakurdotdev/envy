@@ -15,6 +15,7 @@ import {
   type Secrets,
   type UserKeys,
 } from "@envy/crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { makeGitHubUser } from "./fake-github.ts";
 import { readField, type TestApp } from "./test-app.ts";
 
@@ -251,6 +252,7 @@ export async function removeAsClient(
   admin: TestUser,
   projectId: string,
   memberId: string,
+  tokenWrappedKeys: Record<string, Array<{ tokenId: string; wrappedKey: string }>> = {},
 ) {
   const remaining = (await listMembers(testApp, admin, projectId)).filter(
     (member) => member.id !== memberId && member.status === "active",
@@ -273,6 +275,9 @@ export async function removeAsClient(
       newKeyVersion,
       wrappedKeys,
       baseVersion: environment.latestVersion,
+      ...(tokenWrappedKeys[environment.id] === undefined
+        ? {}
+        : { tokenWrappedKeys: tokenWrappedKeys[environment.id] }),
     };
     if (environment.latestVersion > 0) {
       const latest = await pullSecretsAsClient(testApp, admin, {
@@ -294,4 +299,32 @@ export async function removeAsClient(
     accessToken: admin.accessToken,
     body: { rotations },
   });
+}
+
+/** Makes a service token the way the CLI does, and returns its bearer header value. */
+export async function createTokenAsClient(
+  testApp: TestApp,
+  admin: TestUser,
+  place: { projectId: string; environmentId: string },
+  name: string,
+) {
+  const tokenId = randomBytes(24).toString("hex");
+  const tokenKeys = await generateUserKeys();
+  const envKey = await fetchEnvKey(testApp, admin, place.environmentId);
+  const response = await testApp.request("POST", `/v1/projects/${place.projectId}/tokens`, {
+    accessToken: admin.accessToken,
+    body: {
+      environmentId: place.environmentId,
+      name,
+      tokenIdHash: createHash("sha256").update(tokenId).digest("hex"),
+      publicKey: await toBase64Url(tokenKeys.publicKey),
+      wrappedKey: await toBase64Url(await wrapEnvKey(envKey, tokenKeys.publicKey)),
+    },
+  });
+  return {
+    status: response.status,
+    id: readField(response.body, "id"),
+    bearer: `Bearer envy_${tokenId}`,
+    keys: tokenKeys,
+  };
 }

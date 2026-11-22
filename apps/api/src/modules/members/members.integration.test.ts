@@ -5,6 +5,7 @@ import { secretVersions } from "../../db/schema.ts";
 import { pathForLogs } from "../../lib/http.ts";
 import {
   createProjectAsClient,
+  createTokenAsClient,
   fetchEnvKey,
   grantAsClient,
   listMembers,
@@ -181,7 +182,7 @@ describe("removing a member", () => {
     expect(readErrorCode(withoutRotation.body)).toBe("ROTATION_MISMATCH");
 
     const removed = await removeAsClient(testApp, owner, project.projectId, leaving.memberId);
-    expect(removed.status).toBe(204);
+    expect(removed.status).toBe(200);
     const versions = await testApp.database
       .select()
       .from(secretVersions)
@@ -245,6 +246,45 @@ describe("removing a member", () => {
         await pullSecretsAsClient(testApp, user, placeOf("staging")).catch(() => "empty"),
       ).toBe("empty");
     }
+  });
+
+  test("revokes the service tokens and ends the invites the removed member made", async () => {
+    const leavingAdmin = await addMember("leaving-admin", "admin");
+    const staging = placeOf("staging");
+    const token = await createTokenAsClient(testApp, leavingAdmin, staging, "kept-copy");
+    expect(token.status).toBe(201);
+    // An invite for a second account, sent before being removed.
+    const inviteResponse = await testApp.request(
+      "POST",
+      `/v1/projects/${project.projectId}/members`,
+      { accessToken: leavingAdmin.accessToken, body: { email: "alt@example.invalid" } },
+    );
+    const inviteToken = readField(inviteResponse.body, "token");
+    const before = await testApp.request("GET", `/v1/environments/${staging.environmentId}/key`, {
+      headers: { authorization: token.bearer },
+    });
+    expect(before.status).toBe(200);
+
+    // An older client still wraps the new key for the token; that copy is dropped.
+    const removed = await removeAsClient(testApp, owner, project.projectId, leavingAdmin.memberId, {
+      [staging.environmentId]: [
+        { tokenId: token.id, wrappedKey: readField(before.body, "wrappedKey") },
+      ],
+    });
+    expect(removed.status).toBe(200);
+    expect(removed.body).toEqual({
+      revokedTokens: [{ id: token.id, name: "kept-copy", environmentName: "staging" }],
+    });
+
+    const after = await testApp.request("GET", `/v1/environments/${staging.environmentId}/key`, {
+      headers: { authorization: token.bearer },
+    });
+    expect(after.status).toBe(401);
+    const alt = await signUpWithKeys(testApp, "alt");
+    const accepted = await testApp.request("POST", `/v1/invites/${inviteToken}/accept`, {
+      accessToken: alt.accessToken,
+    });
+    expect(readErrorCode(accepted.body)).toBe("INVITE_NOT_FOUND");
   });
 
   test("the owner cannot be removed", async () => {

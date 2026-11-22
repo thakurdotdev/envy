@@ -57,10 +57,7 @@ export function memberRoutes(dependencies: {
     )
     .delete(
       "/v1/members/:id",
-      async ({ context, params, body, set }) => {
-        await members.remove(context, params.id, body?.rotations ?? []);
-        set.status = 204;
-      },
+      ({ context, params, body }) => members.remove(context, params.id, body?.rotations ?? []),
       { params: MemberIdParams, body: RemoveMemberBody },
     );
 }

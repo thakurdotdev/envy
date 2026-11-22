@@ -38,6 +38,8 @@ export async function applyRotation(
   rotation: EnvironmentRotation,
   recipientUserIds: Set<string>,
   now: Date,
+  /** Tokens revoked in the same request: keys sent for them are dropped. */
+  revokedTokenIds: ReadonlySet<string> = new Set(),
 ): Promise<void> {
   if (rotation.newKeyVersion !== environment.currentKeyVersion + 1) {
     throw mismatch(
@@ -62,7 +64,9 @@ export async function applyRotation(
       (token) => token.id,
     ),
   );
-  const tokenKeys = rotation.tokenWrappedKeys ?? [];
+  const tokenKeys = (rotation.tokenWrappedKeys ?? []).filter(
+    (key) => !revokedTokenIds.has(key.tokenId),
+  );
   const wrappedForTokens = new Set(tokenKeys.map((key) => key.tokenId));
   const coversEveryToken =
     wrappedForTokens.size === tokenKeys.length &&
