@@ -11,9 +11,11 @@
     "build": "bun build src/index.ts --compile --outfile dist/envy"
   },
   "dependencies": {
+    "@elysiajs/eden": "1.4.9",
     "@envy/shared": "workspace:*"
   },
   "devDependencies": {
+    "@envy/api": "workspace:*",
     "@envy/tsconfig": "workspace:*"
   }
 }
