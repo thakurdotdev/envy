@@ -82,6 +82,23 @@ All of this is in `packages/crypto` and tested there.
 | Weak master password                       | Leaked data could be cracked offline | Argon2id slows this down but cannot stop it for very weak passwords; the UI should ask for a strong one            |
 | Lost master password and recovery key      | Data is gone for that user           | By design. An admin can grant access again with a new keypair                                                      |
 
+## Team changes
+
+- **Invites** are single-use, expire after 7 days, and only work for the
+  GitHub account with the invited email. Only a hash of the token is stored,
+  and tokens are hidden in logs.
+- **Granting** happens on an admin's machine: the admin unwraps each
+  environment key and wraps it for the new member's public key. Before that,
+  the CLI shows the member's fingerprint, and the member sees the same code
+  when accepting. Comparing the two in person or on a call defeats a server
+  that swaps public keys.
+- **Removing** an active member rotates every environment key in the same
+  transaction: new keys go only to remaining members, and the latest secrets
+  are re-encrypted. Versions written after the removal cannot be decrypted
+  with any key the removed member had (tested). Older versions stay readable
+  to anyone who kept the old key, so the CLI reminds the admin to change the
+  real credentials.
+
 ## Out of scope for v1
 
 - A malicious client build or a hacked developer machine. Envy cannot protect
