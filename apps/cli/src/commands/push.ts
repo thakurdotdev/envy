@@ -1,6 +1,5 @@
-import { join } from "node:path";
 import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
-import { readEnvFile } from "../core/env-file.ts";
+import { projectEnvFilePath, readEnvFile } from "../core/env-file.ts";
 import { CliError } from "../core/errors.ts";
 import { pullEnvironment, pushEnvironment, separateFromShared } from "../core/secrets.ts";
 import { getPulledVersion, setPulledVersion } from "../core/settings.ts";
@@ -16,7 +15,7 @@ export async function push(options: PushOptions): Promise<void> {
   const keys = await context.unlock();
   const projectId = found.link.projectId;
 
-  const path = join(found.folder, found.link.file);
+  const path = await projectEnvFilePath(found);
   const local = await readEnvFile(path);
   if (local === undefined) {
     throw new CliError(`There is no ${found.link.file} to push.`, { hint: "Run envy pull first." });

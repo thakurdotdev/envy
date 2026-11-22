@@ -11,6 +11,7 @@ import {
 import { CliError } from "./errors.ts";
 import { listEnvironments, pullEnvironment } from "./secrets.ts";
 import type { Session } from "./session.ts";
+import { checkPublicKeys } from "./trust.ts";
 import type { UnlockedKeys } from "./unlock.ts";
 
 // Team changes that need cryptography on the admin's machine: giving a new
@@ -38,8 +39,23 @@ export type Member = {
   publicKey: string | null;
 };
 
+/** The project's members. Refuses if anyone's public key changed since this machine last saw it. */
 export async function listMembers(session: Session, projectId: string): Promise<Member[]> {
   const result = await session.call((api) => api.v1.projects({ id: projectId }).members.get());
+  await checkPublicKeys(
+    result.items.flatMap((member) =>
+      member.publicKey === null
+        ? []
+        : [
+            {
+              kind: "user" as const,
+              id: member.userId,
+              label: `@${member.githubLogin}`,
+              publicKey: member.publicKey,
+            },
+          ],
+    ),
+  );
   return result.items;
 }
 
@@ -112,8 +128,7 @@ export async function removeMember(
   member: Member,
 ) {
   if (member.status === "pending") {
-    await session.call((api) => api.v1.members({ id: member.id }).delete({ rotations: [] }));
-    return;
+    return session.call((api) => api.v1.members({ id: member.id }).delete({ rotations: [] }));
   }
   const staying = (await listMembers(session, projectId)).filter(
     (candidate) => candidate.id !== member.id && candidate.status === "active",
@@ -172,16 +187,26 @@ export async function removeMember(
     }
     await clearKey(newEnvKey);
   }
-  await session.call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
+  // The answer lists the service tokens this member made, which were revoked with them.
+  return session.call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
 }
 
 /** Service tokens that still work (not revoked, not expired). */
 export async function listActiveTokens(session: Session, projectId: string) {
   const { items } = await session.call((api) => api.v1.projects({ id: projectId }).tokens.get());
   const now = Date.now();
-  return items.filter(
+  const active = items.filter(
     (token) =>
       token.revokedAt === null &&
       (token.expiresAt === null || new Date(token.expiresAt).getTime() > now),
   );
+  await checkPublicKeys(
+    active.map((token) => ({
+      kind: "token" as const,
+      id: token.id,
+      label: `the service token "${token.name}"`,
+      publicKey: token.publicKey,
+    })),
+  );
+  return active;
 }

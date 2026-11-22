@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { parseProjectLink } from "./project-link.ts";
 
+function linkWithFile(file: string): string {
+  return JSON.stringify({
+    projectId: "0193a6f0-0000-7000-8000-000000000001",
+    defaultEnvironment: "development",
+    file,
+  });
+}
+
 describe("parseProjectLink", () => {
   test("reads a valid file and fills in the default file name", () => {
     const link = parseProjectLink(
@@ -31,5 +39,14 @@ describe("parseProjectLink", () => {
         ".envy.json",
       ),
     ).toThrow('"branches.a"');
+  });
+
+  test("refuses a file outside the project folder", () => {
+    for (const file of ["../.env", "/home/me/.bashrc", "C:\\Users\\me\\.env", "a/../../b"]) {
+      expect(() => parseProjectLink(linkWithFile(file), ".envy.json")).toThrow('"file"');
+    }
+    expect(parseProjectLink(linkWithFile("apps/web/.env.local"), ".envy.json").file).toBe(
+      "apps/web/.env.local",
+    );
   });
 });

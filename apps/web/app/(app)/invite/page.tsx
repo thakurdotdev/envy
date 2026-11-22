@@ -1,6 +1,6 @@
 "use client";
 
-import { fingerprint, fromBase64Url } from "@envy/crypto";
+import { fingerprint, toBase64Url } from "@envy/crypto";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { call, errorMessage } from "@/lib/api";
+import { useUnlocked } from "@/lib/session";
 
 export default function InvitePage() {
   return (
@@ -29,6 +30,7 @@ export default function InvitePage() {
 
 function AcceptInvite() {
   const token = useSearchParams().get("token") ?? "";
+  const { keys } = useUnlocked();
   const [result, setResult] = useState<
     { projectName: string; role: string; fingerprint: string } | undefined
   >();
@@ -40,10 +42,18 @@ function AcceptInvite() {
     setError(undefined);
     try {
       const joined = await call((api) => api.v1.invites({ token }).accept.post());
+      // Worked out from this browser's own key: one from the server's answer
+      // would match a key the server swapped in.
+      if (joined.publicKey !== (await toBase64Url(keys.publicKey))) {
+        setError(
+          "The server has a different public key for you than this browser has. Do not let an admin grant you access, and tell them.",
+        );
+        return;
+      }
       setResult({
         projectName: joined.projectName,
         role: joined.role,
-        fingerprint: await fingerprint(await fromBase64Url(joined.publicKey)),
+        fingerprint: await fingerprint(keys.publicKey),
       });
     } catch (caught) {
       setError(errorMessage(caught));

@@ -8,6 +8,7 @@ import {
 } from "@envy/crypto";
 import type { EnvironmentSummary } from "./environment.ts";
 import type { ApiCaller } from "./session.ts";
+import { checkEnvironmentVersion } from "./trust.ts";
 import type { UnlockedKeys } from "./unlock.ts";
 
 // Every encrypt and decrypt for `envy` commands happens here, on this
@@ -45,6 +46,10 @@ export async function pullEnvironment(
   const { current } = await session.call((api) =>
     api.v1.environments({ id: environment.id }).secrets.get({ query: {} }),
   );
+  await checkEnvironmentVersion(environment, {
+    version: current?.version ?? 0,
+    keyVersion: environment.currentKeyVersion,
+  });
   if (current === null) {
     return { version: 0, secrets: {} };
   }
@@ -80,6 +85,8 @@ export async function pushEnvironment(input: {
 }): Promise<number> {
   const { session, keys, projectId, environment } = input;
   const keyVersion = environment.currentKeyVersion;
+  // A server must not get new secrets encrypted with an older (maybe leaked) key.
+  await checkEnvironmentVersion(environment, { version: input.baseVersion, keyVersion });
   const envKey = await getEnvKey(session, keys, environment.id, keyVersion);
   const encrypted = await encryptSecrets(input.secrets, envKey, {
     projectId,
@@ -97,6 +104,7 @@ export async function pushEnvironment(input: {
   const created = await session.call((api) =>
     api.v1.environments({ id: environment.id }).secrets.post(body),
   );
+  await checkEnvironmentVersion(environment, { version: created.version, keyVersion });
   return created.version;
 }
 

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve, win32 } from "node:path";
 import { CliError, notLinked } from "./errors.ts";
 import { writeFileSafely } from "./settings.ts";
 
@@ -72,6 +72,11 @@ export function parseProjectLink(text: string, path: string): ProjectLink {
   if (typeof fileName !== "string" || fileName === "") {
     throw invalid('"file" must be a file name');
   }
+  // The file is committed with the repo, so someone else may have written
+  // it: envy pull must never write, and envy push never read, outside it.
+  if (!isInsideFolder(fileName)) {
+    throw invalid('"file" must be a path inside this folder, such as .env');
+  }
   const branchMap: Record<string, string> = {};
   if (branches !== undefined) {
     if (typeof branches !== "object" || branches === null || Array.isArray(branches)) {
@@ -85,6 +90,14 @@ export function parseProjectLink(text: string, path: string): ProjectLink {
     }
   }
   return { projectId, defaultEnvironment, file: fileName, branches: branchMap };
+}
+
+/** True for a relative path that cannot point above the folder it starts in. */
+export function isInsideFolder(path: string): boolean {
+  if (isAbsolute(path) || win32.isAbsolute(path) || path.includes("\0")) {
+    return false;
+  }
+  return path.split(/[\\/]/).every((part) => part !== "..");
 }
 
 export async function writeProjectLink(folder: string, link: ProjectLink): Promise<string> {

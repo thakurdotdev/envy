@@ -1,6 +1,5 @@
-import { join } from "node:path";
 import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
-import { readEnvFile, writeEnvFile } from "../core/env-file.ts";
+import { projectEnvFilePath, readEnvFile, writeEnvFile } from "../core/env-file.ts";
 import { mergeLayers, pullEnvironment } from "../core/secrets.ts";
 import { setPulledVersion } from "../core/settings.ts";
 import { warnAboutMissingKeys } from "../core/example-check.ts";
@@ -23,7 +22,7 @@ export async function pull(options: EnvironmentOptions): Promise<void> {
     return { merged: mergeLayers(shared.secrets, pulled.secrets), version: pulled.version };
   });
 
-  const path = join(found.folder, found.link.file);
+  const path = await projectEnvFilePath(found);
   const before = (await readEnvFile(path)) ?? {};
   await writeEnvFile(path, merged);
   await setPulledVersion(environment.id, version);
