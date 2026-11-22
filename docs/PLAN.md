@@ -13,7 +13,7 @@
 | Phase 4 — CLI core                             | Done                       |
 | Phase 5 — Teams and access                     | Done                       |
 | Phase 6 — Web dashboard                        | Done                       |
-| Phase 7 — CI tokens and polish                 | Not started                |
+| Phase 7 — CI tokens and polish                 | Done                       |
 | Phase 8 — Hardening and release                | Not started                |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
@@ -557,14 +557,31 @@ Open questions: none.
 
 Goal: Envy works in CI and feels finished.
 
-- [ ] Service tokens (create, list, revoke) in CLI and web; `ENVY_TOKEN` support in run and pull
-- [ ] Tokens page in the dashboard (moved from Phase 6)
-- [ ] `envy doctor`, `envy completion`, interactive `envy` menu
-- [ ] `.env.example` missing-key warnings
-- [ ] `--json` on all read commands; `NO_COLOR` and non-TTY behaviour
-- [ ] Example GitHub Actions snippet in the README
+- [x] Service tokens (create, list, revoke) in CLI and web; `ENVY_TOKEN` support in run and pull
+- [x] Tokens page in the dashboard (moved from Phase 6)
+- [x] `envy doctor`, `envy completion`, interactive `envy` menu
+- [x] `.env.example` missing-key warnings
+- [x] `--json` on all read commands; `NO_COLOR` and non-TTY behaviour
+- [x] Example GitHub Actions snippet in the README
 
 Done when: a sample repo's GitHub Actions job runs `envy run -- bun test` using only `ENVY_TOKEN`, and the token cannot push or read other environments.
+
+#### Phase 7 summary (2026-11-22)
+
+Built:
+
+- `service_tokens` table; `POST/GET /v1/projects/:id/tokens`, `DELETE /v1/tokens/:id`, `GET /v1/tokens/current`; `envy_` bearer authentication; tokens read one environment only and are refused everything else; key rotations re-wrap for active tokens.
+- `envy token create/ls/revoke`, `ENVY_TOKEN` for `run`, `pull` and `get` (no login, no `.envy.json`), and a Service tokens page in the dashboard.
+- `envy doctor`, `envy completion bash|zsh|fish`, an interactive `envy` menu, `envy env ls/add`, `--json` on read commands, `.env.example` missing-key warnings; colour follows `NO_COLOR` and terminals only.
+- GitHub Actions example in the README.
+- End-to-end test: a machine with only `ENVY_TOKEN` runs `envy run` with the development secrets; the token cannot push, set or read staging; removing a member keeps it working; revoking stops it at once.
+
+Decisions: ADR 0011 (only the token id is ever sent; tokens skip the shared layer).
+
+Open questions:
+
+- The "sample repo on GitHub Actions" check is simulated in the end-to-end test; a real run needs a deployed API (Phase 8).
+- `envy env rm` needs an API route for deleting environments.
 
 ### Phase 8 — Hardening and release
 

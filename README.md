@@ -18,6 +18,39 @@ envy pull                  # write .env
 envy push                  # upload your .env as a new version
 ```
 
+## Using Envy in CI
+
+Create a read-only token for the environment your CI needs. It is shown once:
+
+```sh
+envy token create --env staging --name github-actions --expires 90d
+```
+
+Store it as a repository secret called `ENVY_TOKEN`, then:
+
+```yaml
+# .github/workflows/test.yml
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: Install envy
+        run: curl -fsSL https://envy.dev/install.sh | sh
+      - run: bun install
+      - name: Test with secrets injected
+        run: envy run -- bun test
+        env:
+          ENVY_TOKEN: ${{ secrets.ENVY_TOKEN }}
+```
+
+The token can only read the one environment it was made for. It cannot push,
+see other environments, or read the shared layer. Revoke it any time with
+`envy token revoke github-actions`.
+
 ## Development
 
 You need [Bun](https://bun.com) 1.4.5 and a Postgres 16 database.
