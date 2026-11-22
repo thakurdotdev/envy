@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AuthLayout } from "@/components/auth/auth-layout";
 import { Button } from "@/components/ui/button";
 import { signInUrl } from "@/lib/api";
 
@@ -25,16 +26,16 @@ export default function LoginPage() {
 function LoginError() {
   const code = useSearchParams().get("error") ?? "";
   return (
-    <main className="mx-auto mt-24 max-w-sm space-y-4 px-4">
+    <AuthLayout title="Sign-in did not work" description="Nothing was changed. You can try again.">
       <Alert variant="destructive">
-        <AlertTitle>Sign-in did not work</AlertTitle>
+        <AlertTitle>What happened</AlertTitle>
         <AlertDescription>
           {MESSAGES[code] ?? "Something went wrong during sign-in."}
         </AlertDescription>
       </Alert>
-      <Button asChild className="w-full">
+      <Button asChild size="lg" className="mt-4 h-10 w-full">
         <a href={signInUrl()}>Try again with GitHub</a>
       </Button>
-    </main>
+    </AuthLayout>
   );
 }
