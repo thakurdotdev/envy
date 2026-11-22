@@ -1,30 +1,27 @@
 import Link from "next/link";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { GITHUB_URL } from "./links";
 
-export function Logo() {
-  return (
-    <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-      <span
-        aria-hidden
-        className="flex size-6 items-center justify-center rounded-md bg-red-600 text-xs text-white"
-      >
-        E
-      </span>
-      Envy
-    </Link>
-  );
-}
+const LINK = "text-sm text-muted-foreground transition-colors hover:text-foreground";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
-      <nav aria-label="Main" className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
-        <Logo />
-        <Link href="/docs" className="text-sm text-muted-foreground hover:text-foreground">
+    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+      <nav
+        aria-label="Main"
+        className="mx-auto flex h-14 max-w-6xl items-center gap-5 px-4 sm:gap-7 sm:px-6"
+      >
+        <Link
+          href="/"
+          className="rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <BrandMark />
+        </Link>
+        <Link href="/docs" className={LINK}>
           Docs
         </Link>
-        <a href={GITHUB_URL} className="text-sm text-muted-foreground hover:text-foreground">
+        <a href={GITHUB_URL} className={LINK}>
           GitHub
         </a>
         <Button asChild variant="outline" size="sm" className="ml-auto">
@@ -38,17 +35,22 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="border-t">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-8 text-sm text-muted-foreground">
-        <span>Envy</span>
-        <Link href="/docs" className="hover:text-foreground">
-          Docs
-        </Link>
-        <a href={GITHUB_URL} className="hover:text-foreground">
-          GitHub
-        </a>
-        <a href="/projects" className="hover:text-foreground">
-          Dashboard
-        </a>
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="space-y-2">
+          <BrandMark size="sm" />
+          <p className="text-sm text-muted-foreground">Secrets stay encrypted on your devices.</p>
+        </div>
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
+          <Link href="/docs" className={LINK}>
+            Docs
+          </Link>
+          <a href={GITHUB_URL} className={LINK}>
+            GitHub
+          </a>
+          <a href="/projects" className={LINK}>
+            Dashboard
+          </a>
+        </nav>
       </div>
     </footer>
   );
