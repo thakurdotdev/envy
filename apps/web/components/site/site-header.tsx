@@ -28,7 +28,7 @@ export function SiteHeader() {
           GitHub
         </a>
         <Button asChild variant="outline" size="sm" className="ml-auto">
-          <Link href="/projects">Open dashboard</Link>
+          <a href="/projects">Open dashboard</a>
         </Button>
       </nav>
     </header>
@@ -46,9 +46,9 @@ export function SiteFooter() {
         <a href={GITHUB_URL} className="hover:text-foreground">
           GitHub
         </a>
-        <Link href="/projects" className="hover:text-foreground">
+        <a href="/projects" className="hover:text-foreground">
           Dashboard
-        </Link>
+        </a>
       </div>
     </footer>
   );

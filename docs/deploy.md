@@ -67,9 +67,13 @@ Content-Security-Policy: default-src 'self'; connect-src 'self' https://api.<dom
 ```
 
 (`wasm-unsafe-eval` is needed by libsodium, which runs as WebAssembly.) The
-pages also carry the same policy (without `frame-ancestors`, which only
-works as a header) and `no-referrer` in their HTML, so they stay protected
-if the headers are missing.
+pages also carry their own policy as a `<meta>` tag (`apps/web/lib/content-security-policy.ts`),
+so they stay protected if the headers are missing. The public pages (landing,
+docs) additionally allow the Umami analytics script from `analytics.thakur.dev`;
+the dashboard never loads it, and links between the two halves are full page
+loads so its script never runs next to decrypted secrets. A header policy is
+combined with the page's own, so if you set one on the host, keep the
+dashboard's version above and do not add the analytics origin to it.
 
 ## 4. CLI release
 
