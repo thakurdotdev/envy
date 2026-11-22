@@ -85,6 +85,11 @@ function readErrorBody(body: unknown) {
   return { code, message, details };
 }
 
+/** Anything that can send API calls: a signed-in session or a service token. */
+export type ApiCaller = {
+  call<Data>(request: (api: ApiClient) => Promise<EdenResult<Data>>): Promise<Data>;
+};
+
 export type Session = {
   apiUrl: string;
   credentials: StoredCredentials;

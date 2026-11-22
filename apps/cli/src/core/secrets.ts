@@ -7,7 +7,7 @@ import {
   type Secrets,
 } from "@envy/crypto";
 import type { EnvironmentSummary } from "./environment.ts";
-import type { Session } from "./session.ts";
+import type { ApiCaller } from "./session.ts";
 import type { UnlockedKeys } from "./unlock.ts";
 
 // Every encrypt and decrypt for `envy` commands happens here, on this
@@ -16,7 +16,7 @@ import type { UnlockedKeys } from "./unlock.ts";
 export type EnvironmentSecrets = { version: number; secrets: Secrets };
 
 export async function listEnvironments(
-  session: Session,
+  session: ApiCaller,
   projectId: string,
 ): Promise<EnvironmentSummary[]> {
   const result = await session.call((api) => api.v1.projects({ id: projectId }).environments.get());
@@ -24,7 +24,7 @@ export async function listEnvironments(
 }
 
 async function getEnvKey(
-  session: Session,
+  session: ApiCaller,
   keys: UnlockedKeys,
   environmentId: string,
   keyVersion: number,
@@ -37,7 +37,7 @@ async function getEnvKey(
 
 /** The latest version of an environment, decrypted. An empty environment is version 0. */
 export async function pullEnvironment(
-  session: Session,
+  session: ApiCaller,
   keys: UnlockedKeys,
   projectId: string,
   environment: EnvironmentSummary,
@@ -70,7 +70,7 @@ export async function pullEnvironment(
  * VERSION_CONFLICT when someone else pushed after `baseVersion`.
  */
 export async function pushEnvironment(input: {
-  session: Session;
+  session: ApiCaller;
   keys: UnlockedKeys;
   projectId: string;
   environment: EnvironmentSummary;

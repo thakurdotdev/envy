@@ -22,6 +22,7 @@ type Rotation = {
   environmentId: string;
   newKeyVersion: number;
   wrappedKeys: WrappedKeyForUser[];
+  tokenWrappedKeys: Array<{ tokenId: string; wrappedKey: string }>;
   baseVersion: number;
   ciphertext?: string;
   nonce?: string;
@@ -117,6 +118,7 @@ export async function removeMember(
   const staying = (await listMembers(session, projectId)).filter(
     (candidate) => candidate.id !== member.id && candidate.status === "active",
   );
+  const activeTokens = await listActiveTokens(session, projectId);
   const rotations: Rotation[] = [];
   for (const environment of await listEnvironments(session, projectId)) {
     const newKeyVersion = environment.currentKeyVersion + 1;
@@ -133,11 +135,24 @@ export async function removeMember(
         ),
       });
     }
+    // Service tokens for this environment get the new key too, so CI keeps working.
+    const tokenWrappedKeys: Rotation["tokenWrappedKeys"] = [];
+    for (const token of activeTokens.filter(
+      (candidate) => candidate.environmentId === environment.id,
+    )) {
+      tokenWrappedKeys.push({
+        tokenId: token.id,
+        wrappedKey: await toBase64Url(
+          await wrapEnvKey(newEnvKey, await fromBase64Url(token.publicKey)),
+        ),
+      });
+    }
     const latest = await pullEnvironment(session, keys, projectId, environment);
     const rotation: Rotation = {
       environmentId: environment.id,
       newKeyVersion,
       wrappedKeys,
+      tokenWrappedKeys,
       baseVersion: latest.version,
     };
     if (latest.version === 0) {
@@ -158,4 +173,15 @@ export async function removeMember(
     await clearKey(newEnvKey);
   }
   await session.call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
+}
+
+/** Service tokens that still work (not revoked, not expired). */
+export async function listActiveTokens(session: Session, projectId: string) {
+  const { items } = await session.call((api) => api.v1.projects({ id: projectId }).tokens.get());
+  const now = Date.now();
+  return items.filter(
+    (token) =>
+      token.revokedAt === null &&
+      (token.expiresAt === null || new Date(token.expiresAt).getTime() > now),
+  );
 }

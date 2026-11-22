@@ -61,7 +61,10 @@ export async function unsetVariables(keys: string[], options: EnvironmentOptions
 }
 
 /** Prints one value, the only command that shows a value. Includes the shared layer. */
-export async function getVariable(key: string, options: EnvironmentOptions): Promise<void> {
+export async function getVariable(
+  key: string,
+  options: EnvironmentOptions & { json?: boolean },
+): Promise<void> {
   const context = await openProjectContext(options);
   const { found, session, environment, sharedEnvironment } = context;
   const keys = await context.unlock();
@@ -77,7 +80,7 @@ export async function getVariable(key: string, options: EnvironmentOptions): Pro
       hint: `Set it with envy set ${key}=value.`,
     });
   }
-  output.result(value);
+  output.result(options.json === true ? JSON.stringify({ [key]: value }) : value);
 }
 
 async function changeEnvironment(

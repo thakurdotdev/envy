@@ -3,6 +3,7 @@ import { openProjectContext, type EnvironmentOptions } from "../core/context.ts"
 import { readEnvFile, writeEnvFile } from "../core/env-file.ts";
 import { mergeLayers, pullEnvironment } from "../core/secrets.ts";
 import { setPulledVersion } from "../core/settings.ts";
+import { warnAboutMissingKeys } from "../core/example-check.ts";
 import { diffKeys, formatDiff, isEmptyDiff } from "../ui/diff.ts";
 import { output } from "../ui/output.ts";
 import { withSpinner } from "../ui/prompts.ts";
@@ -27,6 +28,7 @@ export async function pull(options: EnvironmentOptions): Promise<void> {
   await writeEnvFile(path, merged);
   await setPulledVersion(environment.id, version);
 
+  await warnAboutMissingKeys(found.folder, environment.name, merged);
   const diff = diffKeys(before, merged);
   if (!isEmptyDiff(diff)) {
     output.info(formatDiff(diff));

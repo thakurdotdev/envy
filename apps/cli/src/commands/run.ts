@@ -2,6 +2,7 @@ import { openProjectContext, type EnvironmentOptions } from "../core/context.ts"
 import { CliError } from "../core/errors.ts";
 import { mergeLayers, pullEnvironment } from "../core/secrets.ts";
 import { withSpinner } from "../ui/prompts.ts";
+import { warnAboutMissingKeys } from "../core/example-check.ts";
 
 const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 const SIGNAL_NUMBERS: Record<string, number> = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15, SIGKILL: 9 };
@@ -27,6 +28,8 @@ export async function run(command: string[], options: EnvironmentOptions): Promi
         : await pullEnvironment(session, keys, projectId, sharedEnvironment);
     return mergeLayers(shared.secrets, pulled.secrets);
   });
+
+  await warnAboutMissingKeys(found.folder, environment.name, variables);
 
   let child: ReturnType<typeof Bun.spawn>;
   try {

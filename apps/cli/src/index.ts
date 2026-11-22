@@ -20,6 +20,11 @@ import {
   listTeam,
   removeFromTeam,
 } from "./commands/members.ts";
+import { completion } from "./commands/completion.ts";
+import { doctor } from "./commands/doctor.ts";
+import { addEnvironment, listProjectEnvironments } from "./commands/environments.ts";
+import { menu } from "./commands/menu.ts";
+import { createToken, listTokens, revokeToken } from "./commands/token.ts";
 import { CliError, EXIT_CODES } from "./core/errors.ts";
 import { output } from "./ui/output.ts";
 
@@ -35,6 +40,7 @@ const environmentOption = [
   "environment to use (default: from .envy.json)",
 ] as const;
 const yesOption = ["-y, --yes", "answer yes to confirmations (for scripts and CI)"] as const;
+const jsonOption = ["--json", "print machine-readable JSON"] as const;
 
 program
   .command("login")
@@ -103,6 +109,7 @@ program
   .argument("<key>")
   .option(...environmentOption)
   .option(...yesOption)
+  .option(...jsonOption)
   .action(getVariable);
 
 program
@@ -117,6 +124,7 @@ program
   .option(...environmentOption)
   .option(...yesOption)
   .option("-n, --limit <count>", "how many versions to show", "20")
+  .option(...jsonOption)
   .action(history);
 
 program
@@ -128,7 +136,11 @@ program
   .action(rollback);
 
 const members = program.command("members").description("manage who can read this project");
-members.command("ls").description("list members with their key fingerprints").action(listTeam);
+members
+  .command("ls")
+  .description("list members with their key fingerprints")
+  .option(...jsonOption)
+  .action(listTeam);
 members
   .command("invite")
   .description("invite someone by email; prints a link to send them")
@@ -159,6 +171,59 @@ program
   .description("join a project with the invite link you were sent")
   .argument("<link>")
   .action(acceptInvite);
+
+const environments = program.command("env").description("list and add environments");
+environments
+  .command("ls")
+  .description("list environments")
+  .option(...jsonOption)
+  .action(listProjectEnvironments);
+environments
+  .command("add")
+  .description("add an environment (keys are wrapped for every member)")
+  .argument("<name>")
+  .option("--protected", "needs --env and a confirmation every time, like production")
+  .action(addEnvironment);
+
+const tokens = program.command("token").description("read-only service tokens for CI");
+tokens
+  .command("create")
+  .description("make a token that can read one environment (shown once)")
+  .option(...environmentOption)
+  .option(...yesOption)
+  .option("--name <name>", "a name to recognise it by, such as github-actions")
+  .option("--expires <days>", "stop working after this long, for example 90d")
+  .action(createToken);
+tokens
+  .command("ls")
+  .description("list service tokens")
+  .option(...jsonOption)
+  .action(listTokens);
+tokens
+  .command("revoke")
+  .description("stop a token from working")
+  .argument("<name>")
+  .action(revokeToken);
+
+program
+  .command("doctor")
+  .description("check sign-in, project link, .gitignore, keychain, server and missing keys")
+  .option(...jsonOption)
+  .action(doctor);
+
+program
+  .command("completion")
+  .description("print a shell completion script")
+  .argument("<shell>", "bash, zsh or fish")
+  .action((shell: string) => completion(program, shell));
+
+// `envy` alone: a menu in a terminal, the help text otherwise.
+program.action(async () => {
+  await menu(
+    (args) => program.parseAsync(["node", "envy", ...args]).then(() => undefined),
+    () => program.outputHelp(),
+  );
+});
 
 function handleError(error: unknown): never {
   const debug = program.opts()["debug"] === true || process.env["ENVY_DEBUG"] === "1";
