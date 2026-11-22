@@ -150,7 +150,12 @@ function keychainWorks(): boolean {
     const works = probe.getPassword() === "ok";
     probe.deletePassword();
     return works;
-  } catch {
+  } catch (error) {
+    // Only the reason is printed: the probe stores a fixed test value, never a secret.
+    if (process.env["ENVY_DEBUG"] === "1") {
+      const reason = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[debug] OS keychain not usable: ${reason}\n`);
+    }
     return false;
   }
 }
