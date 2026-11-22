@@ -7,7 +7,7 @@
 | Phase                                          | Status                     |
 | ---------------------------------------------- | -------------------------- |
 | Phase 0 — Foundation                           | Done (macOS spike pending) |
-| Phase 1 — Crypto package                       | Not started                |
+| Phase 1 — Crypto package                       | Done                       |
 | Phase 2 — API core: auth and users             | Not started                |
 | Phase 3 — API: projects, environments, secrets | Not started                |
 | Phase 4 — CLI core                             | Not started                |
