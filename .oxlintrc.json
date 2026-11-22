@@ -12,7 +12,13 @@
     "typescript/await-thenable": "error",
     "typescript/consistent-type-imports": "error",
     "eqeqeq": "error",
-    "no-console": "off"
+    "no-console": "off",
+    "import/no-unassigned-import": [
+      "error",
+      {
+        "allow": ["**/*.css"]
+      }
+    ]
   },
   "ignorePatterns": [
     "**/dist/**",
@@ -26,6 +32,12 @@
       "files": ["packages/crypto/**"],
       "rules": {
         "no-console": "error"
+      }
+    },
+    {
+      "files": ["apps/web/components/ui/**"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ]

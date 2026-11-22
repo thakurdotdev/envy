@@ -5,6 +5,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
+  // Workspace packages are TypeScript source, so Next compiles them too.
+  transpilePackages: ["@envy/crypto", "@envy/shared"],
   // Type checking is done once for the whole repo by `bun check`.
   typescript: { ignoreBuildErrors: true },
 };
