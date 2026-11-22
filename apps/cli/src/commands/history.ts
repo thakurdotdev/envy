@@ -7,12 +7,18 @@ import { diffKeys, formatDiff } from "../ui/diff.ts";
 import { output } from "../ui/output.ts";
 import { askConfirm } from "../ui/prompts.ts";
 
-export async function history(options: EnvironmentOptions & { limit?: string }): Promise<void> {
+export async function history(
+  options: EnvironmentOptions & { limit?: string; json?: boolean },
+): Promise<void> {
   const { session, environment } = await openProjectContext(options);
   const limit = Math.min(Number(options.limit ?? "20") || 20, 100);
   const result = await session.call((api) =>
     api.v1.environments({ id: environment.id }).versions.get({ query: { limit } }),
   );
+  if (options.json === true) {
+    output.result(JSON.stringify(result.items, null, 2));
+    return;
+  }
   if (result.items.length === 0) {
     output.success(`${environment.name} has no versions yet.`);
     return;

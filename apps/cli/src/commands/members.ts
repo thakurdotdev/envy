@@ -31,9 +31,20 @@ async function openTeam() {
   return { projectId: found.link.projectId, session };
 }
 
-export async function listTeam(): Promise<void> {
+export async function listTeam(options: { json?: boolean }): Promise<void> {
   const { projectId, session } = await openTeam();
   const members = await listMembers(session, projectId);
+  if (options.json === true) {
+    const withFingerprints = [];
+    for (const member of members) {
+      withFingerprints.push({
+        ...member,
+        fingerprint: member.publicKey === null ? null : await fingerprintOf(member.publicKey),
+      });
+    }
+    output.result(JSON.stringify(withFingerprints, null, 2));
+    return;
+  }
   for (const member of members) {
     const status = member.status === "pending" ? "  (waiting for keys)" : "";
     output.result(

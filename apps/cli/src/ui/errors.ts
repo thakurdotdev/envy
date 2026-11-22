@@ -87,6 +87,14 @@ const FIXES: Record<ErrorCode, { hint?: string; exitCode: ExitCode }> = {
     exitCode: EXIT_CODES.userError,
     hint: "Try again; the project changed meanwhile.",
   },
+  TOKEN_NOT_FOUND: {
+    exitCode: EXIT_CODES.authError,
+    hint: "Check ENVY_TOKEN, or create a new token with envy token create.",
+  },
+  TOKEN_NOT_ALLOWED: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Service tokens can only read their own environment. Sign in with envy login to change things.",
+  },
 };
 
 export function fixForErrorCode(code: ErrorCode): { hint?: string; exitCode: ExitCode } {
