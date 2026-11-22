@@ -73,5 +73,6 @@ export async function openTokenContext(
     // A token reads exactly one environment, so the shared layer is not merged in.
     sharedEnvironment: undefined,
     unlock: async () => keys,
+    canUnlockWithoutAsking: true,
   };
 }

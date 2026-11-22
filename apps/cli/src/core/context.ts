@@ -3,7 +3,7 @@ import { CliError } from "./errors.ts";
 import { resolveEnvironment, type EnvironmentSummary } from "./environment.ts";
 import { getCurrentGitBranch } from "./git.ts";
 import { requireProjectLink, type FoundProjectLink } from "./project-link.ts";
-import { listEnvironments } from "./secrets.ts";
+import { listEnvironments, mergeLayers, pullEnvironment } from "./secrets.ts";
 import { openSession, type ApiCaller } from "./session.ts";
 import { openTokenContext, readServiceToken } from "./service-token.ts";
 import { getUnlockedKeys, type UnlockedKeys } from "./unlock.ts";
@@ -18,6 +18,8 @@ export type ProjectContext = {
   /** The shared layer, unless the chosen environment is the shared one. */
   sharedEnvironment: EnvironmentSummary | undefined;
   unlock(): Promise<UnlockedKeys>;
+  /** True when unlock() will not ask for the master password. */
+  canUnlockWithoutAsking: boolean;
 };
 
 /** Everything a command needs to work on one environment of the linked project. */
@@ -52,6 +54,8 @@ export async function openProjectContext(options: EnvironmentOptions): Promise<P
     environments,
     environment,
     sharedEnvironment,
+    canUnlockWithoutAsking:
+      session.credentials.privateKey !== undefined || Boolean(process.env["ENVY_MASTER_PASSWORD"]),
     async unlock() {
       keys ??= await getUnlockedKeys(session);
       return keys;
@@ -70,4 +74,21 @@ async function confirmProtectedEnvironment(name: string, alreadyConfirmed: boole
   if (!confirmed) {
     throw new CliError("Stopped. Nothing was changed.");
   }
+}
+
+/**
+ * The variables a command would get for the chosen environment: the shared
+ * layer, then the environment on top. This is what `envy run` injects.
+ */
+export async function loadEnvironmentVariables(
+  context: ProjectContext,
+): Promise<Record<string, string>> {
+  const keys = await context.unlock();
+  const projectId = context.found.link.projectId;
+  const pulled = await pullEnvironment(context.session, keys, projectId, context.environment);
+  const shared =
+    context.sharedEnvironment === undefined
+      ? { secrets: {} }
+      : await pullEnvironment(context.session, keys, projectId, context.sharedEnvironment);
+  return mergeLayers(shared.secrets, pulled.secrets);
 }

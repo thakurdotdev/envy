@@ -1,7 +1,6 @@
-import { join } from "node:path";
 import { openProjectContext } from "../core/context.ts";
-import { readEnvFile } from "../core/env-file.ts";
 import { CliError, EXIT_CODES } from "../core/errors.ts";
+import { checkKeys } from "../core/key-check.ts";
 import { getKeystore } from "../core/keystore.ts";
 import { findProjectLink } from "../core/project-link.ts";
 import { readServiceToken } from "../core/service-token.ts";
@@ -83,21 +82,8 @@ export async function doctor(options: { json?: boolean }): Promise<void> {
       api.v1.environments({ id: context.environment.id }).key.get({ query: {} }),
     );
     add("access", "ok", `You can read ${context.environment.name} (key version ${key.keyVersion})`);
-    const local = await readEnvFile(join(context.found.folder, context.found.link.file)).catch(
-      () => undefined,
-    );
-    const example = await readEnvFile(join(context.found.folder, ".env.example")).catch(
-      () => undefined,
-    );
-    if (local !== undefined && example !== undefined) {
-      const missing = Object.keys(example).filter((name) => !Object.hasOwn(local, name));
-      add(
-        "missing keys",
-        missing.length === 0 ? "ok" : "warning",
-        missing.length === 0
-          ? "Every key in .env.example is set"
-          : `Missing from ${context.found.link.file}: ${missing.join(", ")}`,
-      );
+    for (const result of await checkKeys(context)) {
+      add(result.check, result.status, result.message);
     }
   } catch (error) {
     if (!checks.some((check) => check.status === "problem")) {
