@@ -12,7 +12,7 @@
 | Phase 3 — API: projects, environments, secrets | Done                       |
 | Phase 4 — CLI core                             | Done                       |
 | Phase 5 — Teams and access                     | Done                       |
-| Phase 6 — Web dashboard                        | Not started                |
+| Phase 6 — Web dashboard                        | Done                       |
 | Phase 7 — CI tokens and polish                 | Not started                |
 | Phase 8 — Hardening and release                | Not started                |
 
@@ -529,20 +529,36 @@ Goal: everything except `run` can be done in the browser.
 
 Static export rules: `output: "export"` in next.config; all data fetched on the client through Eden; no Next API routes, server actions, middleware or default image optimization; pages with IDs use query parameters (`/project?id=…`) because IDs are unknown at build time. The refresh token is an httpOnly cookie set by the API; the access token stays in memory.
 
-- [ ] GitHub login, master password unlock (key kept in memory only, cleared on tab close or after 15 minutes idle)
-- [ ] Projects list, environment tabs, secret table editor with reveal-on-click and copy
-- [ ] Version history with keys-only diff and rollback
-- [ ] Members page with invite, grant, role change, remove
-- [ ] Tokens page, audit log page, sessions and devices page
-- [ ] Empty, loading and error states on every page; keyboard accessible
+- [x] GitHub login, master password unlock (key kept in memory only, cleared on tab close or after 15 minutes idle)
+- [x] Projects list, environment tabs, secret table editor with reveal-on-click and copy
+- [x] Version history with keys-only diff and rollback
+- [x] Members page with invite, grant, role change, remove
+- [x] Audit log page, sessions and devices page (tokens page moved to Phase 7, with the tokens API)
+- [x] Empty, loading and error states on every page; keyboard accessible
 
 Done when: a blob written by the web decrypts in the CLI and the reverse (shared crypto test), and no plaintext appears in network requests (checked in a Playwright test).
+
+#### Phase 6 summary (2026-11-22)
+
+Built:
+
+- Static Next.js dashboard with shadcn/ui (set up with its CLI), Tailwind v4 and system light/dark mode.
+- GitHub sign-in, master password set-up (recovery key shown once) and unlock; the key lives only in memory and is wiped on lock, after 15 minutes idle and on leaving the page.
+- Projects list (with "waiting for access" counts) and project creation; environment tabs; secret editor with reveal-on-click, copy, add, remove, keys-only confirmation and conflict message; history with keys-only comparison and rollback.
+- Members page (fingerprints, invite link, grant after fingerprint check, role change, remove with key rotation), audit log with paging, signed-in devices with sign-out, invite acceptance page, sign-in error page.
+- Loading, empty and error states on every page; labelled controls, native focus handling from Radix dialogs.
+- Browser test (Playwright): a secret saved in the browser decrypts in the CLI and one set in the CLI shows in the browser; no request or response contains either value or the master password.
+
+Moved: the service tokens page, to Phase 7 with the tokens API (ADR 0010).
+
+Open questions: none.
 
 ### Phase 7 — CI tokens and polish
 
 Goal: Envy works in CI and feels finished.
 
 - [ ] Service tokens (create, list, revoke) in CLI and web; `ENVY_TOKEN` support in run and pull
+- [ ] Tokens page in the dashboard (moved from Phase 6)
 - [ ] `envy doctor`, `envy completion`, interactive `envy` menu
 - [ ] `.env.example` missing-key warnings
 - [ ] `--json` on all read commands; `NO_COLOR` and non-TTY behaviour
