@@ -63,6 +63,11 @@ function Project() {
               <Link href={`/audit?id=${project.id}`}>Audit log</Link>
             </Button>
           ) : null}
+          {isAdmin ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/tokens?id=${project.id}`}>Service tokens</Link>
+            </Button>
+          ) : null}
         </div>
       </PageTitle>
       <Tabs defaultValue={firstTab?.id}>

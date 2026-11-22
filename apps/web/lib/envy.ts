@@ -207,6 +207,7 @@ type Rotation = {
   environmentId: string;
   newKeyVersion: number;
   wrappedKeys: Array<{ userId: string; wrappedKey: string }>;
+  tokenWrappedKeys: Array<{ tokenId: string; wrappedKey: string }>;
   baseVersion: number;
   ciphertext?: string;
   nonce?: string;
@@ -230,6 +231,7 @@ export async function removeMember(
   const staying = everyone.filter(
     (candidate) => candidate.id !== member.id && candidate.status === "active",
   );
+  const activeTokens = await listActiveTokens(projectId);
   const rotations: Rotation[] = [];
   for (const environment of await listEnvironments(projectId)) {
     const newKeyVersion = environment.currentKeyVersion + 1;
@@ -245,11 +247,24 @@ export async function removeMember(
         });
       }
     }
+    // Service tokens for this environment get the new key too, so CI keeps working.
+    const tokenWrappedKeys: Rotation["tokenWrappedKeys"] = [];
+    for (const token of activeTokens.filter(
+      (candidate) => candidate.environmentId === environment.id,
+    )) {
+      tokenWrappedKeys.push({
+        tokenId: token.id,
+        wrappedKey: await toBase64Url(
+          await wrapEnvKey(newEnvKey, await fromBase64Url(token.publicKey)),
+        ),
+      });
+    }
     const latest = await pullEnvironment(keys, projectId, environment.id);
     const rotation: Rotation = {
       environmentId: environment.id,
       newKeyVersion,
       wrappedKeys,
+      tokenWrappedKeys,
       baseVersion: latest.version,
     };
     if (latest.version > 0) {
@@ -280,4 +295,48 @@ export function diffKeys(before: Secrets, after: Secrets) {
 /** Eden turns ISO date strings into Date objects at runtime even though the type says string. */
 export function formatDate(value: string | Date): string {
   return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Service tokens that still work (not revoked, not expired). */
+export async function listActiveTokens(projectId: string) {
+  const { items } = await call((api) => api.v1.projects({ id: projectId }).tokens.get());
+  const now = Date.now();
+  return items.filter(
+    (token) =>
+      token.revokedAt === null &&
+      (token.expiresAt === null || new Date(token.expiresAt).getTime() > now),
+  );
+}
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Makes a read-only token for one environment, entirely in the browser. The
+ * API gets the public key, the environment key wrapped for it and a hash of
+ * the token id. Returns the token text, which is shown once.
+ */
+export async function createServiceToken(
+  keys: UnlockedKeys,
+  projectId: string,
+  environment: EnvironmentSummary,
+  name: string,
+): Promise<string> {
+  const tokenId = toHex(crypto.getRandomValues(new Uint8Array(24)));
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(tokenId));
+  const tokenKeys = await generateUserKeys();
+  const envKey = await getEnvKey(keys, environment.id, environment.currentKeyVersion);
+  const body = {
+    environmentId: environment.id,
+    name,
+    tokenIdHash: toHex(new Uint8Array(digest)),
+    publicKey: await toBase64Url(tokenKeys.publicKey),
+    wrappedKey: await toBase64Url(await wrapEnvKey(envKey, tokenKeys.publicKey)),
+  };
+  await clearKey(envKey);
+  await call((api) => api.v1.projects({ id: projectId }).tokens.post(body));
+  const token = `envy_${tokenId}_${await toBase64Url(tokenKeys.privateKey)}`;
+  await clearKey(tokenKeys.privateKey);
+  return token;
 }
