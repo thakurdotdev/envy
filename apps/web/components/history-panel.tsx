@@ -1,10 +1,10 @@
 "use client";
 
+import { X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -12,7 +12,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -23,19 +25,14 @@ import {
 } from "@/components/ui/table";
 import { useLoad } from "@/hooks/use-load";
 import { ApiError, call, errorMessage } from "@/lib/api";
-import {
-  diffKeys,
-  formatDate,
-  pullEnvironment,
-  pushEnvironment,
-  type EnvironmentSummary,
-} from "@/lib/envy";
+import { diffKeys, pullEnvironment, pushEnvironment, type EnvironmentSummary } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
 import { EmptyState, LoadError, LoadingRows } from "./states";
+import { TimeAgo } from "./time-ago";
 
 type Comparison = {
   version: number;
-  summary: string;
+  diff: { added: string[]; changed: string[]; removed: string[] };
   secrets: Record<string, string>;
   baseVersion: number;
 };
@@ -63,23 +60,20 @@ export function HistoryPanel({
     [environment.id, revision],
   );
   const [comparison, setComparison] = useState<Comparison | undefined>();
+  const [comparing, setComparing] = useState<number | undefined>();
+  const [confirming, setConfirming] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
 
   async function compare(version: number) {
+    setComparing(version);
     try {
       const [old, current] = await Promise.all([
         pullEnvironment(keys, projectId, environment.id, version),
         pullEnvironment(keys, projectId, environment.id),
       ]);
-      const diff = diffKeys(current.secrets, old.secrets);
-      const parts = [
-        ...diff.added.map((key) => `+ ${key}`),
-        ...diff.changed.map((key) => `~ ${key}`),
-        ...diff.removed.map((key) => `− ${key}`),
-      ];
       setComparison({
         version,
-        summary: parts.length === 0 ? "Same as the current version." : parts.join("  "),
+        diff: diffKeys(current.secrets, old.secrets),
         secrets: old.secrets,
         baseVersion: current.version,
       });
@@ -89,10 +83,13 @@ export function HistoryPanel({
           ? "That version uses a key from before you joined, so it cannot be opened here."
           : errorMessage(error),
       );
+    } finally {
+      setComparing(undefined);
     }
   }
 
   async function rollBack(target: Comparison) {
+    setRollingBack(true);
     try {
       const version = await pushEnvironment({
         keys,
@@ -104,6 +101,7 @@ export function HistoryPanel({
       });
       toast.success(`Rolled back to version ${target.version} (saved as version ${version})`);
       setComparison(undefined);
+      setConfirming(false);
       onChanged();
     } catch (error) {
       toast.error(errorMessage(error));
@@ -119,8 +117,9 @@ export function HistoryPanel({
     return <LoadError message={state.message} onRetry={reload} />;
   }
   if (state.data.items.length === 0) {
-    return <EmptyState title="No versions yet" />;
+    return <EmptyState title="No versions yet">The first save becomes version 1.</EmptyState>;
   }
+  const latest = state.data.items[0]?.version;
   return (
     <div className="space-y-4">
       <Table>
@@ -137,15 +136,40 @@ export function HistoryPanel({
         </TableHeader>
         <TableBody>
           {state.data.items.map((item) => (
-            <TableRow key={item.version}>
-              <TableCell>v{item.version}</TableCell>
-              <TableCell>{formatDate(item.createdAt)}</TableCell>
+            <TableRow
+              key={item.version}
+              data-state={comparison?.version === item.version ? "selected" : undefined}
+            >
+              <TableCell className="font-mono">
+                v{item.version}
+                {item.version === latest ? (
+                  <Badge variant="secondary" className="ml-2 font-sans">
+                    current
+                  </Badge>
+                ) : null}
+              </TableCell>
+              <TableCell>
+                <TimeAgo value={item.createdAt} />
+              </TableCell>
               <TableCell>@{item.author.githubLogin}</TableCell>
-              <TableCell className="text-muted-foreground">{item.message ?? ""}</TableCell>
+              <TableCell
+                className="max-w-64 truncate text-muted-foreground"
+                title={item.message ?? undefined}
+              >
+                {item.message ?? ""}
+              </TableCell>
               <TableCell className="text-right">
-                <Button variant="outline" size="sm" onClick={() => void compare(item.version)}>
-                  Compare
-                </Button>
+                {item.version === latest ? null : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={comparing !== undefined}
+                    onClick={() => void compare(item.version)}
+                  >
+                    {comparing === item.version ? <Spinner /> : null}
+                    Compare
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           ))}
@@ -153,35 +177,75 @@ export function HistoryPanel({
       </Table>
       {comparison === undefined ? null : (
         <div className="rounded-lg border p-4" aria-live="polite">
-          <p className="text-sm font-medium">
-            Going back to version {comparison.version} would change:
-          </p>
-          <p className="mt-2 font-mono text-sm">{comparison.summary}</p>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm font-medium">
+              Going back to version {comparison.version} would change:
+            </p>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close the comparison"
+              onClick={() => setComparison(undefined)}
+            >
+              <X />
+            </Button>
+          </div>
+          <DiffList diff={comparison.diff} />
           {canEdit ? (
-            <Button className="mt-3" size="sm" onClick={() => setRollingBack(true)}>
+            <Button className="mt-3" size="sm" onClick={() => setConfirming(true)}>
               Roll back to version {comparison.version}
             </Button>
           ) : null}
         </div>
       )}
-      <AlertDialog open={rollingBack} onOpenChange={setRollingBack}>
+      <AlertDialog
+        open={confirming}
+        onOpenChange={(open) => (rollingBack ? undefined : setConfirming(open))}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Roll back {environment.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Version {comparison?.version} is saved again as a new version. Nothing is deleted.
+              Version {comparison?.version} is saved again as a new version. Nothing is deleted, so
+              you can roll forward the same way.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            <AlertDialogCancel disabled={rollingBack}>Cancel</AlertDialogCancel>
+            <Button
+              disabled={rollingBack}
               onClick={() => (comparison === undefined ? undefined : void rollBack(comparison))}
             >
-              Roll back
-            </AlertDialogAction>
+              {rollingBack ? <Spinner /> : null}
+              {rollingBack ? "Rolling back…" : "Roll back"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function DiffList({ diff }: { diff: Comparison["diff"] }) {
+  const lines = [
+    ...diff.added.map((key) => ({
+      key,
+      mark: "+",
+      tone: "text-emerald-600 dark:text-emerald-400",
+    })),
+    ...diff.changed.map((key) => ({ key, mark: "~", tone: "text-amber-600 dark:text-amber-300" })),
+    ...diff.removed.map((key) => ({ key, mark: "−", tone: "text-destructive" })),
+  ];
+  if (lines.length === 0) {
+    return <p className="mt-2 text-sm text-muted-foreground">Nothing: it is the same as now.</p>;
+  }
+  return (
+    <ul aria-label="Changes" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[13px]">
+      {lines.map((line) => (
+        <li key={line.key} className={line.tone}>
+          {line.mark} {line.key}
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -1,14 +1,14 @@
 "use client";
 
-import { AlertCircle, Copy, Eye, EyeOff, Trash2 } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Trash2 } from "lucide-react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { rowProblem, rowStatus, type Row } from "@/lib/env-rows";
 import { cn } from "@/lib/utils";
+import { CopyButton } from "./copy-button";
 
 const GRID = "sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]";
 
@@ -29,12 +29,14 @@ export function EnvTable({
   visibleRows,
   saved,
   canEdit,
+  focusRowId,
   handlers,
 }: {
   rows: Row[];
   visibleRows: Row[];
   saved: Record<string, string>;
   canEdit: boolean;
+  focusRowId?: number | undefined;
   handlers: RowHandlers;
 }) {
   return (
@@ -58,6 +60,7 @@ export function EnvTable({
             status={rowStatus(saved, row)}
             problem={rowProblem(row, rows)}
             canEdit={canEdit}
+            autoFocus={row.id === focusRowId}
             handlers={handlers}
           />
         ))}
@@ -72,6 +75,7 @@ function EnvRow({
   status,
   problem,
   canEdit,
+  autoFocus,
   handlers,
 }: {
   row: Row;
@@ -79,6 +83,7 @@ function EnvRow({
   status: "new" | "edited" | undefined;
   problem: string | undefined;
   canEdit: boolean;
+  autoFocus: boolean;
   handlers: RowHandlers;
 }) {
   const label = row.key || "new variable";
@@ -107,6 +112,8 @@ function EnvRow({
             aria-invalid={problem !== undefined}
             className={cn("font-mono text-[13px]", status !== undefined && "pr-16")}
             placeholder="VARIABLE_NAME"
+            // oxlint-disable-next-line jsx-a11y/no-autofocus -- the user just pressed "Add"
+            autoFocus={autoFocus}
             value={row.key}
             readOnly={!canEdit}
             spellCheck={false}
@@ -153,19 +160,12 @@ function EnvRow({
           >
             {row.revealed ? <EyeOff /> : <Eye />}
           </Button>
-          <Button
+          <CopyButton
+            text={row.value}
+            label={label}
             variant="ghost"
-            size="icon"
             className="text-muted-foreground"
-            aria-label={`Copy ${label}`}
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(row.value)
-                .then(() => toast.success(`Copied ${label}`));
-            }}
-          >
-            <Copy />
-          </Button>
+          />
           {canEdit ? (
             <Button
               variant="ghost"

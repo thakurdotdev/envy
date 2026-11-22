@@ -1,10 +1,12 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { AppShell, PageTitle } from "@/components/app-shell";
+import { SectionTitle } from "@/components/app-shell";
+import { ProjectFrame, type ProjectInfo } from "@/components/project-frame";
 import { EmptyState, LoadError, LoadingRows } from "@/components/states";
+import { TimeAgo } from "@/components/time-ago";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -15,36 +17,112 @@ import {
 } from "@/components/ui/table";
 import { useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
-import { formatDate } from "@/lib/envy";
 
 export default function AuditPage() {
   return (
-    <AppShell>
-      <Suspense fallback={<LoadingRows label="Loading audit log" />}>
-        <AuditLog />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<LoadingRows label="Loading audit log" />}>
+      <ProjectFrame section="Audit log">{(project) => <AuditLog project={project} />}</ProjectFrame>
+    </Suspense>
   );
 }
+
+type Metadata = Record<string, string | number | boolean | null>;
 
 type AuditItem = {
   id: string;
   action: string;
-  actorId: string;
-  targetType: string;
-  metadata: Record<string, string | number | boolean | null> | null;
+  actorType: string;
+  actorName?: string | null;
+  metadata: Metadata | null;
   ip: string | null;
   userAgent: string | null;
   createdAt: string;
 };
 
-function AuditLog() {
-  const projectId = useSearchParams().get("id") ?? "";
+// Plain words for each action, and which details are worth showing.
+const ACTIONS: Record<string, { label: string; describe?: (metadata: Metadata) => string }> = {
+  "project.created": { label: "Created the project" },
+  "project.renamed": {
+    label: "Renamed the project",
+    describe: (m) => `to ${String(m["name"] ?? "")}`,
+  },
+  "project.deleted": { label: "Deleted the project" },
+  "environment.created": {
+    label: "Added an environment",
+    describe: (m) => String(m["name"] ?? ""),
+  },
+  "environment.rotated": {
+    label: "Changed an environment key",
+    describe: (m) => `key version ${String(m["keyVersion"] ?? "")}`,
+  },
+  "secrets.read": {
+    label: "Read secrets",
+    describe: (m) => `version ${String(m["version"] ?? "")}`,
+  },
+  "secrets.pushed": {
+    label: "Saved secrets",
+    describe: (m) => `version ${String(m["version"] ?? "")}`,
+  },
+  "member.invited": {
+    label: "Invited someone",
+    describe: (m) => `${String(m["email"] ?? "")} as ${String(m["role"] ?? "")}`,
+  },
+  "member.joined": {
+    label: "Accepted an invite",
+    describe: (m) => `as ${String(m["role"] ?? "")}`,
+  },
+  "member.granted": {
+    label: "Gave access",
+    describe: (m) => `to @${String(m["githubLogin"] ?? "")}`,
+  },
+  "member.role_changed": {
+    label: "Changed a role",
+    describe: (m) =>
+      `@${String(m["githubLogin"] ?? "")}: ${String(m["from"] ?? "")} → ${String(m["to"] ?? "")}`,
+  },
+  "member.removed": {
+    label: "Removed a member",
+    describe: (m) => `@${String(m["githubLogin"] ?? "")}`,
+  },
+  "token.created": {
+    label: "Made a service token",
+    describe: (m) => `"${String(m["name"] ?? "")}" for ${String(m["environment"] ?? "")}`,
+  },
+  "token.revoked": {
+    label: "Revoked a service token",
+    describe: (m) =>
+      `"${String(m["name"] ?? "")}"${m["reason"] === "creator removed" ? " (its maker was removed)" : ""}`,
+  },
+};
+
+function describeAction(item: AuditItem): { label: string; details: string } {
+  const known = ACTIONS[item.action];
+  const metadata = item.metadata ?? {};
+  if (known === undefined) {
+    const details = Object.entries(metadata)
+      .map(([name, value]) => `${name}: ${String(value)}`)
+      .join(", ");
+    return { label: item.action, details };
+  }
+  return { label: known.label, details: known.describe?.(metadata) ?? "" };
+}
+
+function describeActor(item: AuditItem): string {
+  // An API from before names were added sends no actorName at all.
+  if (item.actorName === undefined) {
+    return "—";
+  }
+  return item.actorName ?? "a deleted account";
+}
+
+function AuditLog({ project }: { project: ProjectInfo }) {
   const { state, reload } = useLoad(
-    () => call((api) => api.v1.projects({ id: projectId }).audit.get({ query: { limit: 50 } })),
-    [projectId],
+    () => call((api) => api.v1.projects({ id: project.id }).audit.get({ query: { limit: 50 } })),
+    [project.id],
+    { cacheKey: `audit:${project.id}` },
   );
   const [more, setMore] = useState<{ items: AuditItem[]; nextCursor: string | null } | undefined>();
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
   if (state.status === "loading") {
@@ -53,13 +131,15 @@ function AuditLog() {
   if (state.status === "error") {
     return <LoadError message={state.message} onRetry={reload} />;
   }
-  const items = [...state.data.items, ...(more?.items ?? [])];
+  const items: AuditItem[] = [...state.data.items, ...(more?.items ?? [])];
   const nextCursor = more === undefined ? state.data.nextCursor : more.nextCursor;
 
   async function loadMore(cursor: string) {
+    setLoadingMore(true);
+    setError(undefined);
     try {
       const page = await call((api) =>
-        api.v1.projects({ id: projectId }).audit.get({ query: { cursor, limit: 50 } }),
+        api.v1.projects({ id: project.id }).audit.get({ query: { cursor, limit: 50 } }),
       );
       setMore((current) => ({
         items: [...(current?.items ?? []), ...page.items],
@@ -67,36 +147,58 @@ function AuditLog() {
       }));
     } catch (caught) {
       setError(errorMessage(caught));
+    } finally {
+      setLoadingMore(false);
     }
   }
 
   return (
-    <>
-      <PageTitle title="Audit log" />
+    <section aria-labelledby="audit-heading">
+      <SectionTitle
+        id="audit-heading"
+        title="Audit log"
+        description="Who read or changed what, newest first. Values are never recorded."
+      />
       {items.length === 0 ? <EmptyState title="Nothing has happened yet" /> : null}
       {items.length > 0 ? (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>When</TableHead>
+              <TableHead>Who</TableHead>
               <TableHead>What</TableHead>
-              <TableHead>Details</TableHead>
               <TableHead>From</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="whitespace-nowrap">{formatDate(item.createdAt)}</TableCell>
-                <TableCell className="font-mono text-sm">{item.action}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {Object.entries(item.metadata ?? {})
-                    .map(([name, value]) => `${name}: ${String(value)}`)
-                    .join(", ")}
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">{item.ip ?? ""}</TableCell>
-              </TableRow>
-            ))}
+            {items.map((item) => {
+              const { label, details } = describeAction(item);
+              return (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <TimeAgo value={item.createdAt} />
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {describeActor(item)}
+                    {item.actorType === "token" ? (
+                      <span className="ml-1 text-xs text-muted-foreground">(token)</span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <span className="font-medium">{label}</span>
+                    {details === "" ? null : (
+                      <span className="ml-1.5 text-muted-foreground">{details}</span>
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className="text-sm whitespace-nowrap text-muted-foreground"
+                    title={item.userAgent ?? undefined}
+                  >
+                    {item.ip ?? ""}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       ) : null}
@@ -106,10 +208,16 @@ function AuditLog() {
         </p>
       )}
       {nextCursor === null ? null : (
-        <Button variant="outline" className="mt-4" onClick={() => void loadMore(nextCursor)}>
-          Load more
+        <Button
+          variant="outline"
+          className="mt-4"
+          disabled={loadingMore}
+          onClick={() => void loadMore(nextCursor)}
+        >
+          {loadingMore ? <Spinner /> : null}
+          Load older entries
         </Button>
       )}
-    </>
+    </section>
   );
 }

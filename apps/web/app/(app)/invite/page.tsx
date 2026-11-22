@@ -4,7 +4,6 @@ import { fingerprint, toBase64Url } from "@envy/crypto";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { AppShell } from "@/components/app-shell";
 import { LoadingRows } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,16 +14,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useDocumentTitle } from "@/hooks/use-document-title";
+import { forgetCached } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
 import { useUnlocked } from "@/lib/session";
 
 export default function InvitePage() {
+  useDocumentTitle("Join a project");
   return (
-    <AppShell>
-      <Suspense fallback={<LoadingRows label="Loading invite" />}>
-        <AcceptInvite />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<LoadingRows label="Loading invite" />}>
+      <AcceptInvite />
+    </Suspense>
   );
 }
 
@@ -50,6 +50,7 @@ function AcceptInvite() {
         );
         return;
       }
+      forgetCached("projects");
       setResult({
         projectName: joined.projectName,
         role: joined.role,

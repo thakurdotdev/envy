@@ -231,12 +231,76 @@ describe("web dashboard, end to end", () => {
   }, 120_000);
 });
 
+describe("dashboard navigation and actions", () => {
+  test("pages switch without reloading, edits survive tab switches, tokens are shown once", async () => {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${webServer.port}/projects`);
+    await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+    await unlock(page);
+    await page.getByRole("link", { name: /Web App/ }).click();
+    await page.getByRole("tab", { name: /development/ }).waitFor();
+    // Survives only if no page change reloads the document.
+    await page.evaluate(() => Object.assign(window, { envyProbe: true }));
+
+    // Unsaved edits stay when switching environment tabs, and the tab says so.
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expectLocator(page.getByLabel("Variable name").last()).toBeFocused();
+    await page.getByLabel("Variable name").last().fill("DRAFT_ONLY");
+    await page.getByRole("tab", { name: /staging/ }).click();
+    await page.getByRole("tab", { name: /development/ }).click();
+    await expectLocator(page.getByLabel("Variable name").last()).toHaveValue("DRAFT_ONLY");
+    await page.getByRole("img", { name: "unsaved changes" }).waitFor();
+    await page.getByRole("button", { name: "Discard" }).click();
+
+    // Project pages are client-side: still unlocked, same document.
+    const projectNav = page.getByRole("navigation", { name: "Project" });
+    await projectNav.getByRole("link", { name: "Members" }).click();
+    await page.getByRole("heading", { name: "Members", exact: true }).waitFor();
+    await projectNav.getByRole("link", { name: "Service tokens" }).click();
+    expect(await page.evaluate(() => "envyProbe" in window)).toBe(true);
+
+    // A new token is shown in a dialog that stays until it is stored.
+    await page.getByLabel("Name").fill("ci-from-web");
+    await page.getByRole("button", { name: "Create token" }).click();
+    expect(await page.getByLabel("New service token").inputValue()).toMatch(/^envy_[0-9a-f]{48}_/);
+    expect(await page.getByRole("button", { name: "Done" }).isDisabled()).toBe(true);
+    await page.getByLabel("I have stored the token").check();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    // Revoking asks first.
+    await page
+      .getByRole("row", { name: /ci-from-web/ })
+      .getByRole("button", { name: "Revoke" })
+      .click();
+    await page.getByRole("button", { name: "Revoke token" }).click();
+    await page
+      .getByRole("row", { name: /ci-from-web/ })
+      .getByText("revoked")
+      .waitFor();
+
+    // The audit log says who did it, in words.
+    await projectNav.getByRole("link", { name: "Audit log" }).click();
+    await page.getByRole("row", { name: /@web-user.*Revoked a service token/ }).waitFor();
+    expect(await page.evaluate(() => "envyProbe" in window)).toBe(true);
+    await page.close();
+  }, 120_000);
+});
+
 // Playwright's own `expect` is not used, so this small bridge waits for
 // visibility and values with bun:test assertions.
 function expectLocator(locator: ReturnType<Page["getByTestId"]>) {
   return {
     async toBeVisible() {
       await locator.waitFor({ state: "visible" });
+    },
+    async toBeFocused() {
+      const deadline = Date.now() + 5000;
+      while (!(await locator.evaluate((element) => element === document.activeElement))) {
+        if (Date.now() > deadline) {
+          throw new Error("The element did not get the focus.");
+        }
+        await Bun.sleep(50);
+      }
     },
     async toHaveValue(value: string) {
       await locator.waitFor();
