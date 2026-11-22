@@ -9,7 +9,7 @@
 | Phase 0 — Foundation                           | Done (macOS spike pending) |
 | Phase 1 — Crypto package                       | Done                       |
 | Phase 2 — API core: auth and users             | Done                       |
-| Phase 3 — API: projects, environments, secrets | Not started                |
+| Phase 3 — API: projects, environments, secrets | Done                       |
 | Phase 4 — CLI core                             | Not started                |
 | Phase 5 — Teams and access                     | Not started                |
 | Phase 6 — Web dashboard                        | Not started                |
@@ -437,14 +437,28 @@ Open questions: concurrent refreshes from two CLI processes end the session (no 
 
 Goal: the API can store and serve encrypted secrets with history.
 
-- [ ] Tables: projects, members, environments, environment_keys, secret_versions, audit_log
-- [ ] Modules: projects, environments, secrets, audit (routes, service, repository, schema each)
-- [ ] Creating a project also creates shared, development, staging, production (production protected), with the owner's wrapped keys sent by the client
-- [ ] Push with baseVersion and 409 VERSION_CONFLICT
-- [ ] Version history and fetch by version
-- [ ] Audit entries for every secret read and write
+- [x] Tables: projects, members, environments, environment_keys, secret_versions, audit_log
+- [x] Modules: projects, environments, secrets, audit (routes, service, repository, schema each)
+- [x] Creating a project also creates shared, development, staging, production (production protected), with the owner's wrapped keys sent by the client
+- [x] Push with baseVersion and 409 VERSION_CONFLICT
+- [x] Version history and fetch by version
+- [x] Audit entries for every secret read and write
 
 Done when: integration tests prove a non-member gets 404 (not 403, to avoid leaking existence), conflicting pushes get 409, and no route ever accepts or returns plaintext.
+
+#### Phase 3 summary (2026-11-22)
+
+Built:
+
+- Tables `projects`, `members`, `environments`, `environment_keys`, `secret_versions`, `audit_log` with indexes on every foreign key, `(environment_id, version desc)` and `(project_id, created_at desc)`.
+- Modules `projects`, `environments`, `secrets`, `audit` (routes, service, repository, schema), plus a `members` repository and one access checker for roles.
+- Project creation makes shared, development, staging and protected production with the owner's wrapped keys; extra environments need a key for every active member.
+- Push with `baseVersion`, 409 `VERSION_CONFLICT` with `latestVersion` (also when two pushes race), fetch by version, paged history, audit entries for every secret read and write, admin-only audit list, soft delete.
+- Integration tests: non-members get 404 on every project and environment route, conflicting and racing pushes get 409, a real client round trip decrypts every version, and a marker value never appears in any request, response or database row.
+
+Moved: `POST /v1/environments/:id/rotate` to Phase 5, where member removal needs it (ADR 0007).
+
+Open questions: none.
 
 ### Phase 4 — CLI core
 
