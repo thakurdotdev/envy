@@ -120,7 +120,7 @@ export function authRoutes({ auth, config, rateLimiters }: AuthRoutesDependencie
         { body: RefreshBody, beforeHandle: limit(rateLimiters.refresh, "refresh") },
       )
       // Everything below needs a signed-in user.
-      .use(authGuard(auth))
+      .use(authGuard(auth, config.trustProxy))
       .post("/v1/auth/logout", async ({ actor, cookie, set }) => {
         await auth.logout(actor);
         cookie[REFRESH_COOKIE]?.set({ value: "", ...refreshCookie, ...expired });

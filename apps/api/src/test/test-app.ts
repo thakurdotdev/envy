@@ -31,6 +31,9 @@ export async function createTestApp() {
     github: github.client,
   });
 
+  // Every request and response body, so tests can check what crossed the wire.
+  const traffic: string[] = [];
+
   async function request(method: string, path: string, options: RequestOptions = {}) {
     const headers = new Headers(options.headers);
     if (options.accessToken !== undefined) {
@@ -47,6 +50,7 @@ export async function createTestApp() {
       }),
     );
     const text = await response.text();
+    traffic.push(`${method} ${path} ${JSON.stringify(options.body ?? null)} ${text}`);
     const body: unknown = text === "" ? undefined : JSON.parse(text);
     return { status: response.status, headers: response.headers, body };
   }
@@ -55,6 +59,7 @@ export async function createTestApp() {
     app,
     github,
     request,
+    traffic,
     database: testDatabase.database,
     advanceClock(milliseconds: number) {
       now = new Date(now.getTime() + milliseconds);

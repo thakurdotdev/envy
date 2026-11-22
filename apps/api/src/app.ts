@@ -13,6 +13,16 @@ import { createAuthService } from "./modules/auth/service.ts";
 import { createUserRepository } from "./modules/users/repository.ts";
 import { userRoutes } from "./modules/users/routes.ts";
 import { createUserService } from "./modules/users/service.ts";
+import { createAccessChecker } from "./lib/access.ts";
+import { auditRoutes } from "./modules/audit/routes.ts";
+import { createAuditService } from "./modules/audit/service.ts";
+import { environmentRoutes } from "./modules/environments/routes.ts";
+import { createEnvironmentService } from "./modules/environments/service.ts";
+import { projectRoutes } from "./modules/projects/routes.ts";
+import { createProjectService } from "./modules/projects/service.ts";
+import { secretRoutes } from "./modules/secrets/routes.ts";
+import { createSecretService } from "./modules/secrets/service.ts";
+import { createRepositories, createRunInTransaction } from "./repositories.ts";
 
 /** Everything the API needs from outside. Tests pass their own versions. */
 export type AppDependencies = {
@@ -43,6 +53,15 @@ export function createApp(dependencies: AppDependencies) {
   });
   const users = createUserService({ users: userRepository });
 
+  const repositories = createRepositories(database);
+  const runInTransaction = createRunInTransaction(database);
+  const access = createAccessChecker(repositories);
+  const projects = createProjectService({ repositories, runInTransaction, access, clock });
+  const environments = createEnvironmentService({ repositories, runInTransaction, access });
+  const secrets = createSecretService({ repositories, runInTransaction, access });
+  const audit = createAuditService({ audit: repositories.audit, access });
+  const { trustProxy } = config;
+
   // The CLI polls about every 5 seconds while the user approves the sign-in.
   const rateLimiters = {
     deviceStart: createRateLimiter({ limit: 10, windowMs: MINUTE_MS }, clock),
@@ -56,7 +75,11 @@ export function createApp(dependencies: AppDependencies) {
     .use(cors({ origin: config.webUrl, credentials: true }))
     .get("/health", () => ({ status: "ok" as const }))
     .use(authRoutes({ auth, config, rateLimiters }))
-    .use(userRoutes({ auth, users }));
+    .use(userRoutes({ auth, users, trustProxy }))
+    .use(projectRoutes({ auth, projects, trustProxy }))
+    .use(environmentRoutes({ auth, environments, trustProxy }))
+    .use(secretRoutes({ auth, secrets, trustProxy }))
+    .use(auditRoutes({ auth, audit, trustProxy }));
 }
 
 /** The API's type. The CLI and web import only this, through Eden Treaty. */

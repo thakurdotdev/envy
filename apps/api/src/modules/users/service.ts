@@ -1,14 +1,8 @@
-import { base64UrlByteLength } from "../../lib/base64url.ts";
+import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
 import type { UserRow } from "../../db/schema.ts";
 import type { Actor } from "../auth/service.ts";
 import type { UserKeyMaterial, UserRepository } from "./repository.ts";
-
-// Sizes from packages/crypto format version 1. The API cannot decrypt
-// anything, but it can refuse values that no client could have made.
-const PUBLIC_KEY_BYTES = 32;
-const SALT_BYTES = 16;
-const ENCRYPTED_PRIVATE_KEY_BYTES = 1 + 24 + 32 + 16;
 
 export function createUserService(dependencies: { users: UserRepository }) {
   const { users } = dependencies;
@@ -29,16 +23,16 @@ export function createUserService(dependencies: { users: UserRepository }) {
 
     /** First setup only: key material cannot be replaced through this route. */
     async setKeys(actor: Actor, keys: UserKeyMaterial) {
-      assertByteLength(keys.publicKey, PUBLIC_KEY_BYTES, "publicKey");
-      assertByteLength(keys.kdfSalt, SALT_BYTES, "kdfSalt");
-      assertByteLength(
+      assertBase64UrlBytes(keys.publicKey, BYTE_SIZES.publicKey, "publicKey");
+      assertBase64UrlBytes(keys.kdfSalt, BYTE_SIZES.salt, "kdfSalt");
+      assertBase64UrlBytes(
         keys.encryptedPrivateKey,
-        ENCRYPTED_PRIVATE_KEY_BYTES,
+        BYTE_SIZES.encryptedPrivateKey,
         "encryptedPrivateKey",
       );
-      assertByteLength(
+      assertBase64UrlBytes(
         keys.recoveryEncryptedPrivateKey,
-        ENCRYPTED_PRIVATE_KEY_BYTES,
+        BYTE_SIZES.encryptedPrivateKey,
         "recoveryEncryptedPrivateKey",
       );
       const saved = await users.setKeysIfEmpty(actor.userId, keys);
@@ -52,16 +46,6 @@ export function createUserService(dependencies: { users: UserRepository }) {
       return toProfile(await getUser(actor));
     },
   };
-}
-
-function assertByteLength(value: string, expectedBytes: number, field: string): void {
-  if (base64UrlByteLength(value) !== expectedBytes) {
-    throw new AppError(
-      "VALIDATION_FAILED",
-      `The value of ${field} must be ${expectedBytes} bytes in base64url.`,
-      400,
-    );
-  }
 }
 
 function toProfile(user: UserRow) {
