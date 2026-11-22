@@ -25,4 +25,9 @@ describe("getClientIp", () => {
     expect(getClientIp(requestWith("203.0.113.9"), null, 2)).toBe("203.0.113.9");
     expect(getClientIp(requestWith(undefined), null, 2)).toBe("unknown");
   });
+
+  test("an IPv4 address in IPv6 form is stored plain; real IPv6 stays as it is", () => {
+    expect(getClientIp(requestWith("::ffff:198.51.100.7"), null, 1)).toBe("198.51.100.7");
+    expect(getClientIp(requestWith("2001:db8::7"), null, 1)).toBe("2001:db8::7");
+  });
 });

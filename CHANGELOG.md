@@ -5,6 +5,8 @@
 - Website and dashboard: new design. Warm neutral colours with Envy red as the one accent, a mono type for names and commands, light and dark. The landing page shows a .env file next to what the server stores. Commands stay on one line on phones.
 - Dashboard: busy buttons keep their label and show a spinner; the variables table, history, members, tokens, audit log and devices share one table and badge style.
 - Web: a test fails on uppercase labels, gradients, em dashes and emoji.
+- API: warns at start when production runs with `TRUST_PROXY=0`, which makes the audit log show the proxy's address (`::ffff:127.0.0.1`) instead of the visitor's and puts every user in one rate limit.
+- API: an IPv4 client seen in IPv6 form (`::ffff:1.2.3.4`) is recorded as plain `1.2.3.4`. Visitors on IPv6-only networks (common on mobile) still show their real IPv6 address.
 
 ## 0.1.3 (2026-11-22)
 
