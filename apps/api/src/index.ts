@@ -1,7 +1,45 @@
 import { createApp } from "./app.ts";
+import { ConfigError, loadConfig } from "./config.ts";
+import { createDatabase } from "./db/client.ts";
+import { systemClock } from "./lib/clock.ts";
+import { createLogger } from "./lib/logger.ts";
+import { createGitHubClient } from "./modules/auth/github.ts";
 
-// Phase 2 replaces this with config.ts, which validates every env var at boot.
-const port = Number(process.env["PORT"] ?? 3000);
+const MAX_REQUEST_BODY_BYTES = 256 * 1024;
 
-createApp().listen(port);
-console.log(`API listening on http://localhost:${port}`);
+const logger = createLogger();
+
+function readConfig() {
+  try {
+    return loadConfig(process.env);
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
+const config = readConfig();
+const { database, close } = createDatabase(config.databaseUrl);
+const github = createGitHubClient({
+  clientId: config.githubClientId,
+  clientSecret: config.githubClientSecret,
+});
+
+const app = createApp({ config, database, clock: systemClock, logger, github }).listen({
+  port: config.port,
+  maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+});
+logger.info("API started", { port: config.port, environment: config.environment });
+
+async function shutDown(signal: string): Promise<void> {
+  logger.info("API stopping", { signal });
+  await app.stop();
+  await close();
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => void shutDown("SIGTERM"));
+process.on("SIGINT", () => void shutDown("SIGINT"));
