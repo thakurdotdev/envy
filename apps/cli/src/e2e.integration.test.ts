@@ -1,49 +1,18 @@
-import { createTestApp, makeGitHubUser, type TestApp } from "@envy/api/testing";
+import { makeGitHubUser } from "@envy/api/testing";
 import { parseDotenv } from "@envy/shared";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { startE2eHarness, type E2eHarness } from "./test/e2e-harness.ts";
 
-// Builds the real single-file binary and drives it against a real API
-// server (with a fake GitHub), exactly as a user would from a terminal,
-// except that nobody is there to answer prompts.
-
-const MASTER_PASSWORD = "e2e master password";
-let testApp: TestApp;
-let apiUrl: string;
+let harness: E2eHarness;
 let workspace: string;
-let binary: string;
 
-type RunResult = { exitCode: number; stdout: string; stderr: string };
-
-async function runEnvy(
+function runEnvy(
   args: string[],
   options: { cwd: string; home: string; env?: Record<string, string> },
-): Promise<RunResult> {
-  const child = Bun.spawn([binary, ...args], {
-    cwd: options.cwd,
-    env: {
-      PATH: process.env["PATH"] ?? "",
-      HOME: options.home,
-      ENVY_CONFIG_DIR: join(options.home, ".config", "envy"),
-      ENVY_API_URL: apiUrl,
-      ENVY_KEYSTORE: "file",
-      ENVY_MASTER_PASSWORD: MASTER_PASSWORD,
-      ENVY_NO_BROWSER: "1",
-      NO_COLOR: "1",
-      ...options.env,
-    },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  return { exitCode, stdout, stderr };
+) {
+  return harness.runEnvy(args, options);
 }
 
 async function readEnv(path: string): Promise<Record<string, string>> {
@@ -51,23 +20,13 @@ async function readEnv(path: string): Promise<Record<string, string>> {
 }
 
 beforeAll(async () => {
-  workspace = await mkdtemp(join(tmpdir(), "envy-e2e-"));
-  binary = join(workspace, "envy");
-  const build = Bun.spawnSync(
-    ["bun", "build", join(import.meta.dir, "index.ts"), "--compile", "--outfile", binary],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  if (build.exitCode !== 0) {
-    throw new Error(`Building the CLI failed: ${build.stderr.toString()}`);
-  }
-  testApp = await createTestApp();
-  testApp.github.autoApproveDevices(makeGitHubUser("e2e"));
-  apiUrl = testApp.listen();
+  harness = await startE2eHarness();
+  workspace = harness.workspace;
+  harness.testApp.github.autoApproveDevices(makeGitHubUser("e2e"));
 }, 120_000);
 
 afterAll(async () => {
-  await testApp.close();
-  await rm(workspace, { recursive: true, force: true });
+  await harness.close();
 });
 
 describe("envy, end to end", () => {
