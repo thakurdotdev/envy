@@ -31,6 +31,7 @@ export async function createTestApp() {
     github: github.client,
   });
 
+  let isListening = false;
   // Every request and response body, so tests can check what crossed the wire.
   const traffic: string[] = [];
 
@@ -64,7 +65,18 @@ export async function createTestApp() {
     advanceClock(milliseconds: number) {
       now = new Date(now.getTime() + milliseconds);
     },
-    close: testDatabase.drop,
+    /** Serves the API over real HTTP on a free port, for spawned clients. */
+    listen(): string {
+      isListening = true;
+      const server = app.listen({ port: 0, hostname: "127.0.0.1" });
+      return `http://127.0.0.1:${server.server?.port ?? 0}`;
+    },
+    async close() {
+      if (isListening) {
+        await app.stop(true);
+      }
+      await testDatabase.drop();
+    },
     /** Runs the whole CLI device sign-in for a GitHub user. */
     async signInWithCli(user: GitHubUser, deviceName = "test laptop") {
       const started = await request("POST", "/v1/auth/github/device");
@@ -111,3 +123,5 @@ export function readErrorCode(body: unknown): string | undefined {
   }
   return undefined;
 }
+
+export { makeGitHubUser } from "./fake-github.ts";

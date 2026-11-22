@@ -3,6 +3,10 @@ import type { GitHubClient, GitHubUser } from "../modules/auth/github.ts";
 /** A stand-in for GitHub. Tests decide who signs in and when. */
 export function createFakeGitHub() {
   const approvedDevices = new Map<string, GitHubUser>();
+  // When set, every device code is approved for this user straight away
+  // (for end-to-end tests where nobody can click "Authorize").
+  let autoApproveUser: GitHubUser | undefined;
+  let intervalSeconds = 5;
   const webCodes = new Map<string, GitHubUser>();
   const usersByToken = new Map<string, GitHubUser>();
   let counter = 0;
@@ -22,11 +26,11 @@ export function createFakeGitHub() {
         userCode: "ABCD-1234",
         verificationUri: "https://github.com/login/device",
         expiresInSeconds: 900,
-        intervalSeconds: 5,
+        intervalSeconds,
       };
     },
     async pollDeviceFlow(deviceCode) {
-      const user = approvedDevices.get(deviceCode);
+      const user = approvedDevices.get(deviceCode) ?? autoApproveUser;
       if (user === undefined) {
         return { status: "pending" };
       }
@@ -59,6 +63,11 @@ export function createFakeGitHub() {
     client,
     /** The user approves the device code on github.com. */
     approveDevice: (deviceCode: string, user: GitHubUser) => approvedDevices.set(deviceCode, user),
+    /** Approves every future device sign-in for this user, with no polling wait. */
+    autoApproveDevices(user: GitHubUser) {
+      autoApproveUser = user;
+      intervalSeconds = 0;
+    },
     /** GitHub will accept this code at the web callback. */
     allowWebCode: (code: string, user: GitHubUser) => webCodes.set(code, user),
   };
