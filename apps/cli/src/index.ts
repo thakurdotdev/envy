@@ -25,6 +25,7 @@ import { doctor } from "./commands/doctor.ts";
 import { addEnvironment, listProjectEnvironments } from "./commands/environments.ts";
 import { menu } from "./commands/menu.ts";
 import { createToken, listTokens, revokeToken } from "./commands/token.ts";
+import { upgrade } from "./commands/upgrade.ts";
 import { CliError, EXIT_CODES } from "./core/errors.ts";
 import { output } from "./ui/output.ts";
 
@@ -204,6 +205,11 @@ tokens
   .description("stop a token from working")
   .argument("<name>")
   .action(revokeToken);
+
+program
+  .command("upgrade")
+  .description("install the latest envy release (checksum verified)")
+  .action(upgrade);
 
 program
   .command("doctor")
