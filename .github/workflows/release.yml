@@ -33,9 +33,12 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          # Nothing here pushes, so the git token is not kept on disk.
+          persist-credentials: false
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
@@ -96,7 +99,7 @@ jobs:
             console.log("Keychain works:", keychain.message);
           '
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.target }}
           path: dist/${{ matrix.file }}
@@ -109,8 +112,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # For the signed build provenance below.
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
@@ -118,6 +124,12 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum envy-* > checksums.txt && cat checksums.txt
+
+      # Signs a record of which workflow and commit built each file, so anyone
+      # can check a download with: gh attestation verify <file> --repo thakurdotdev/envy
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-path: dist/envy-*
 
       - name: Create the GitHub release
         env:
