@@ -70,6 +70,13 @@ export function createAuditService(dependencies: {
           id: row.id,
           actorType: row.actorType,
           actorId: row.actorId,
+          // "@login" for a person, the token's name for a service token.
+          actorName:
+            row.actorType === "user"
+              ? row.actorLogin === null
+                ? null
+                : `@${row.actorLogin}`
+              : row.actorTokenName,
           action: row.action,
           targetType: row.targetType,
           targetId: row.targetId,

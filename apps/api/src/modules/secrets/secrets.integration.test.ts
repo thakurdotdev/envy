@@ -258,6 +258,14 @@ describe("access", () => {
       accessToken: viewer.accessToken,
     });
     expect(audit.status).toBe(403);
+
+    // The owner sees who did what by name, not just by id.
+    const asOwner = await testApp.request("GET", `/v1/projects/${project.projectId}/audit`, {
+      accessToken: owner.accessToken,
+    });
+    expect(readItems(asOwner.body)).toContainEqual(
+      expect.objectContaining({ action: "secrets.read", actorName: "@viewer" }),
+    );
   });
 
   test("new environments must carry a key for every active member", async () => {
