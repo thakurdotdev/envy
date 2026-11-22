@@ -48,11 +48,12 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      - name: Format, lint, type check and unit tests
+      # Includes the integration tests, which use the Postgres service above.
+      - name: Format, lint, type check and tests
         run: bun run verify
 
-      # Integration tests (real Postgres) start in Phase 2. Until then this
-      # step proves the migrations run against a clean database.
+      # Proves the committed migrations apply to a clean database, the same
+      # way the release step runs them.
       - name: Database migrations
         run: bun run db:migrate
 
