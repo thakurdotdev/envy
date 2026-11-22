@@ -11,7 +11,7 @@
 | Phase 2 — API core: auth and users             | Done                       |
 | Phase 3 — API: projects, environments, secrets | Done                       |
 | Phase 4 — CLI core                             | Done                       |
-| Phase 5 — Teams and access                     | Not started                |
+| Phase 5 — Teams and access                     | Done                       |
 | Phase 6 — Web dashboard                        | Not started                |
 | Phase 7 — CI tokens and polish                 | Not started                |
 | Phase 8 — Hardening and release                | Not started                |
@@ -498,14 +498,30 @@ Open questions:
 
 Goal: a team can share a project safely.
 
-- [ ] invites table; invite by email (link printed by the CLI; email sending later)
-- [ ] Pending members and grant flow; CLI prompt for admins after login
-- [ ] Roles: owner, admin, member, viewer (viewer = pull only, no push)
-- [ ] Remove member → key rotation for every environment they could read + reminder to rotate real credentials
-- [ ] Key fingerprints in `envy members ls` and on invite acceptance
-- [ ] history and rollback
+- [x] invites table; invite by email (link printed by the CLI; email sending later)
+- [x] Pending members and grant flow; CLI prompt for admins after login
+- [x] Roles: owner, admin, member, viewer (viewer = pull only, no push)
+- [x] Remove member → key rotation for every environment they could read + reminder to rotate real credentials
+- [x] Key fingerprints in `envy members ls` and on invite acceptance
+- [x] history and rollback
 
 Done when: tests show a removed member cannot decrypt any version pushed after removal, a viewer cannot push, and rotation keeps every remaining member able to pull.
+
+#### Phase 5 summary (2026-11-22)
+
+Built:
+
+- `invites` table; `POST /v1/projects/:id/members` (invite by email, link printed by the CLI), `POST /v1/invites/:token/accept`, `GET /v1/projects/:id/members` (public keys), `POST /v1/members/:id/grant`, `PATCH` and `DELETE /v1/members/:id`, `POST /v1/environments/:id/rotate`.
+- Pending members get nothing until granted; admins are asked once after `envy login` to grant waiting people.
+- Roles: owner, admin, member, viewer (viewer = pull only); the owner cannot be changed or removed.
+- Removing an active member rotates every environment key in the same transaction, and the CLI reminds the admin to change the real credentials.
+- Client-side fingerprints in `envy members ls`, `envy members grant` and `envy accept`.
+- `envy history`, `envy rollback <version>`, `envy members ls/invite/grant/rm/role`, `envy accept <link>`.
+- Tests: a removed member's kept key fails to decrypt every version written after removal (and the API gives them 404), a viewer cannot push, remaining members still pull after rotation, invite rules (one use, email match, expiry), and an end-to-end CLI run of invite → accept → grant → history → rollback → remove.
+
+Decisions: ADR 0009.
+
+Open questions: none.
 
 ### Phase 6 — Web dashboard
 
