@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-11-23)
 
-Security fixes from a third audit (see `docs/security-review.md` and ADR 0016). **Update the CLI before the API is updated:** older CLIs cannot write the new key format.
+Security fixes from a third audit (see `docs/security-review.md`, ADR 0016 and ADR 0017). **Run `envy upgrade`:** the server now only accepts environment keys in the new format, so older CLIs can no longer create projects or environments, grant, remove members or make tokens, and cannot read keys made in the new format.
 
 - New: `envy password` and the dashboard's settings page change your master password; `envy recover` and "Forgot it? Use your recovery key" on the unlock screen get you back in with the recovery key (ADR 0017). Before, the recovery key could not be used at all.
 - Environment keys now prove who made them. A hacked server can no longer make its own key and have the CLI or dashboard encrypt new secrets with it, or serve secrets of its own making.
@@ -11,7 +11,6 @@ Security fixes from a third audit (see `docs/security-review.md` and ADR 0016). 
 - CLI: `envy pull` no longer writes through a folder that links outside the project.
 - `.env` files: `$` and backticks inside double quotes are escaped, so `source .env` cannot run a command hidden in a value.
 - API: an https `API_URL` always means secure cookies and HSTS, even without `APP_ENV=production`; failed database queries are logged without their values; key changes and member removals that happen at the same moment can no longer leave a removed member with a key.
-
 - Website and dashboard: new design. Warm neutral colours with Envy red as the one accent, a mono type for names and commands, light and dark. The landing page shows a .env file next to what the server stores. Commands stay on one line on phones.
 - Dashboard: busy buttons keep their label and show a spinner; the variables table, history, members, tokens, audit log and devices share one table and badge style.
 - Web: a test fails on uppercase labels, gradients, em dashes and emoji.
