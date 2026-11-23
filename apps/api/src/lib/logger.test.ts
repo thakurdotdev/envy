@@ -25,4 +25,28 @@ describe("logger", () => {
       body: { nested: [{ name: "ok" }] },
     });
   });
+
+  test("logs a failed database query without its values", () => {
+    const lines: string[] = [];
+    const logger = createLogger((line) => lines.push(line));
+    const cause = Object.assign(new Error("Key (email)=(ada@example.com) already exists"), {
+      code: "23505",
+    });
+    const error = new Error(
+      'Failed query: insert into "users" ("email", "wrapped") values ($1, $2)\nparams: ada@example.com,d3JhcHBlZA',
+      { cause },
+    );
+
+    logger.error("unexpected error", { error });
+
+    const line = lines[0] ?? "";
+    expect(line).not.toContain("ada@example.com");
+    expect(line).not.toContain("d3JhcHBlZA");
+    expect(JSON.parse(line)).toMatchObject({
+      error: {
+        message: 'Failed query: insert into "users" ("email", "wrapped") values ($1, $2)',
+        databaseCode: "23505",
+      },
+    });
+  });
 });
