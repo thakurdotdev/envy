@@ -45,6 +45,19 @@ export function createProjectRepository(executor: Executor) {
       return rows.map((row) => ({ ...row.project, role: row.role }));
     },
 
+    /**
+     * Locks the project row until the transaction ends. Changes to who holds
+     * the keys (new environments, removals, grants, rotations) take this lock
+     * first, so two of them never act on different lists of members.
+     */
+    async lockForKeyChange(projectId: string): Promise<void> {
+      await executor
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.id, projectId))
+        .for("update");
+    },
+
     async rename(projectId: string, name: string): Promise<void> {
       await executor.update(projects).set({ name }).where(eq(projects.id, projectId));
     },

@@ -179,25 +179,12 @@ export function createMemberService(dependencies: {
           409,
         );
       }
-      const environments = await repositories.environments.listForProject(member.projectId);
-      const expected = new Map(
-        environments.map((environment) => [environment.id, environment.currentKeyVersion]),
-      );
-      const coversEveryEnvironment =
-        wrappedKeys.length === expected.size &&
-        new Set(wrappedKeys.map((key) => key.environmentId)).size === expected.size &&
-        wrappedKeys.every((key) => expected.get(key.environmentId) === key.keyVersion);
-      if (!coversEveryEnvironment) {
-        throw new AppError(
-          "RECIPIENTS_MISMATCH",
-          "Send one wrapped key for every environment, at its current key version.",
-          400,
-        );
-      }
       for (const key of wrappedKeys) {
         assertBase64UrlBytes(key.wrappedKey, BYTE_SIZES.wrappedEnvKey, "wrappedKey");
       }
       await runInTransaction(async (transaction) => {
+        await transaction.projects.lockForKeyChange(member.projectId);
+        await assertKeyForEveryEnvironment(transaction, member.projectId, wrappedKeys);
         await transaction.environments.addWrappedKeys(
           wrappedKeys.map((key) => ({
             environmentId: key.environmentId,
@@ -262,24 +249,27 @@ export function createMemberService(dependencies: {
       if (member.role === "owner") {
         throw new AppError("OWNER_CANNOT_CHANGE", "The owner cannot be removed.", 403);
       }
-      const environments = await repositories.environments.listForProject(member.projectId);
       const needsRotation = member.status === "active";
       const rotationFor = new Map(rotations.map((rotation) => [rotation.environmentId, rotation]));
-      const coversEveryEnvironment = needsRotation
-        ? rotationFor.size === rotations.length &&
-          rotations.length === environments.length &&
-          environments.every((environment) => rotationFor.has(environment.id))
-        : rotations.length === 0;
-      if (!coversEveryEnvironment) {
-        throw new AppError(
-          "ROTATION_MISMATCH",
-          needsRotation
-            ? "Removing an active member needs a key rotation for every environment."
-            : "This member never had keys, so send no rotations.",
-          400,
-        );
-      }
-      const revokedTokens = await runInTransaction(async (transaction) => {
+      const { revokedTokens, environments } = await runInTransaction(async (transaction) => {
+        // Read the environments under the lock: one made a moment ago would
+        // otherwise keep a key the removed member can open.
+        await transaction.projects.lockForKeyChange(member.projectId);
+        const current = await transaction.environments.listForProject(member.projectId);
+        const coversEveryEnvironment = needsRotation
+          ? rotationFor.size === rotations.length &&
+            rotations.length === current.length &&
+            current.every((environment) => rotationFor.has(environment.id))
+          : rotations.length === 0;
+        if (!coversEveryEnvironment) {
+          throw new AppError(
+            "ROTATION_MISMATCH",
+            needsRotation
+              ? "Removing an active member needs a key rotation for every environment."
+              : "This member never had keys, so send no rotations.",
+            400,
+          );
+        }
         const now = clock.now();
         await transaction.members.remove(member.memberId);
         await transaction.members.expireOpenInvitesFrom(member.projectId, member.userId, now);
@@ -299,7 +289,7 @@ export function createMemberService(dependencies: {
         }
         const revokedTokenIds = new Set(revoked.map((token) => token.id));
         const remaining = new Set(await transaction.members.listActiveUserIds(member.projectId));
-        for (const environment of environments) {
+        for (const environment of current) {
           const rotation = rotationFor.get(environment.id);
           if (rotation !== undefined) {
             await applyRotation(
@@ -320,7 +310,7 @@ export function createMemberService(dependencies: {
           targetId: member.memberId,
           metadata: { githubLogin: member.githubLogin },
         });
-        return revoked;
+        return { revokedTokens: revoked, environments: current };
       });
       const environmentNames = new Map(environments.map((row) => [row.id, row.name]));
       return {
@@ -332,6 +322,29 @@ export function createMemberService(dependencies: {
       };
     },
   };
+}
+
+// The new member needs every environment, each at its current key version.
+async function assertKeyForEveryEnvironment(
+  repositories: Repositories,
+  projectId: string,
+  wrappedKeys: Array<{ environmentId: string; keyVersion: number }>,
+): Promise<void> {
+  const environments = await repositories.environments.listForProject(projectId);
+  const expected = new Map(
+    environments.map((environment) => [environment.id, environment.currentKeyVersion]),
+  );
+  const coversEveryEnvironment =
+    wrappedKeys.length === expected.size &&
+    new Set(wrappedKeys.map((key) => key.environmentId)).size === expected.size &&
+    wrappedKeys.every((key) => expected.get(key.environmentId) === key.keyVersion);
+  if (!coversEveryEnvironment) {
+    throw new AppError(
+      "RECIPIENTS_MISMATCH",
+      "Send one wrapped key for every environment, at its current key version.",
+      400,
+    );
+  }
 }
 
 function toMemberDto(member: MemberWithUser) {
