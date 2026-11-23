@@ -1,4 +1,5 @@
 import { t } from "elysia";
+import { ClientEnvironmentId } from "../environments/schema.ts";
 
 const wrappedKey = t.String({ minLength: 1, maxLength: 200, pattern: "^[A-Za-z0-9_-]+$" });
 
@@ -19,6 +20,16 @@ export const CreateProjectBody = t.Object(
         development: wrappedKey,
         staging: wrappedKey,
         production: wrappedKey,
+      },
+      { additionalProperties: false },
+    ),
+    /** The ids the client chose for the four environments, bound into their keys. */
+    environmentIds: t.Object(
+      {
+        shared: ClientEnvironmentId,
+        development: ClientEnvironmentId,
+        staging: ClientEnvironmentId,
+        production: ClientEnvironmentId,
       },
       { additionalProperties: false },
     ),

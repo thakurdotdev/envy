@@ -1,7 +1,7 @@
 import { treaty, type Treaty } from "@elysiajs/eden";
 // Type only: the dashboard never bundles the API's code, just its route types.
 import type { App } from "@envy/api";
-import { isErrorCode, type ErrorCode } from "@envy/shared";
+import { isErrorCode, TrustError, type ErrorCode } from "@envy/shared";
 
 export const API_URL = (process.env["NEXT_PUBLIC_API_URL"] ?? "http://localhost:3000").replace(
   /\/+$/,
@@ -141,5 +141,12 @@ export async function signOut(): Promise<void> {
 
 /** A message for the user; network and server faults get a plain fallback. */
 export function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : "Something went wrong. Try again.";
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  // A refused key or an older version than seen before (ADR 0013, ADR 0016).
+  if (error instanceof TrustError) {
+    return `${error.message} ${error.hint}`;
+  }
+  return "Something went wrong. Try again.";
 }

@@ -70,8 +70,8 @@ export function HistoryPanel({
     setComparing(version);
     try {
       const [old, current] = await Promise.all([
-        pullEnvironment(keys, projectId, environment.id, version),
-        pullEnvironment(keys, projectId, environment.id),
+        pullEnvironment(keys, projectId, environment, version),
+        pullEnvironment(keys, projectId, environment),
       ]);
       setComparison({
         version,

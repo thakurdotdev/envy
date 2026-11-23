@@ -8,5 +8,8 @@
   },
   "devDependencies": {
     "@envy/tsconfig": "workspace:*"
+  },
+  "dependencies": {
+    "@envy/crypto": "workspace:*"
   }
 }

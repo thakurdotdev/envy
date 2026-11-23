@@ -23,6 +23,7 @@ export type CreateProjectInput = {
   name: string;
   slug?: string | undefined;
   environmentKeys: Record<StarterEnvironmentName, string>;
+  environmentIds: Record<StarterEnvironmentName, string>;
 };
 
 export function createProjectService(dependencies: {
@@ -42,6 +43,10 @@ export function createProjectService(dependencies: {
           `environmentKeys.${environment.name}`,
         );
       }
+      const ids = new Set(Object.values(input.environmentIds));
+      if (ids.size !== STARTER_ENVIRONMENTS.length) {
+        throw new AppError("VALIDATION_FAILED", "Each environment needs its own id.", 400);
+      }
       const ownerId = requireUser(context.actor).userId;
       const slug = input.slug ?? makeSlug(input.name);
       try {
@@ -55,6 +60,7 @@ export function createProjectService(dependencies: {
           });
           for (const starter of STARTER_ENVIRONMENTS) {
             const environment = await transaction.environments.create({
+              id: input.environmentIds[starter.name],
               projectId: created.id,
               ...starter,
             });

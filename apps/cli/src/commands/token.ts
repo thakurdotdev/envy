@@ -1,17 +1,12 @@
-import {
-  clearKey,
-  fromBase64Url,
-  generateUserKeys,
-  toBase64Url,
-  unwrapEnvKey,
-  wrapEnvKey,
-} from "@envy/crypto";
+import { clearKey, generateUserKeys, toBase64Url } from "@envy/crypto";
 import { createHash, randomBytes } from "node:crypto";
 import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
 import { CliError } from "../core/errors.ts";
 import { requireProjectLink } from "../core/project-link.ts";
 import { openSession } from "../core/session.ts";
-import { checkPublicKeys } from "../core/trust.ts";
+import { fetchEnvKey, wrapEnvKeyFor } from "../core/env-keys.ts";
+import { tokenKeyOwner } from "../core/team.ts";
+import { pinConfirmedPublicKeys } from "../core/trust.ts";
 import { output } from "../ui/output.ts";
 
 export type CreateTokenOptions = EnvironmentOptions & { name?: string; expires?: string };
@@ -30,13 +25,13 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
 
   const tokenId = randomBytes(24).toString("hex");
   const tokenKeys = await generateUserKeys();
-  const ownKey = await session.call((api) =>
-    api.v1
-      .environments({ id: environment.id })
-      .key.get({ query: { keyVersion: environment.currentKeyVersion } }),
-  );
-  const envKey = await unwrapEnvKey(await fromBase64Url(ownKey.wrappedKey), keys.privateKey);
-  const wrappedKey = await toBase64Url(await wrapEnvKey(envKey, tokenKeys.publicKey));
+  const keyVersion = environment.currentKeyVersion;
+  const projectId = found.link.projectId;
+  const envKey = await fetchEnvKey({ session, keys, projectId, environment, keyVersion });
+  const wrappedKey = await wrapEnvKeyFor(envKey, keys, tokenKeys.publicKey, {
+    environmentId: environment.id,
+    keyVersion,
+  });
   await clearKey(envKey);
 
   const body = {
@@ -47,17 +42,10 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
     wrappedKey,
     ...(expiresAt === undefined ? {} : { expiresAt }),
   };
-  const created = await session.call((api) =>
-    api.v1.projects({ id: found.link.projectId }).tokens.post(body),
-  );
+  const created = await session.call((api) => api.v1.projects({ id: projectId }).tokens.post(body));
   // Made here, so this is the one time the key is known to be right.
-  await checkPublicKeys([
-    {
-      kind: "token",
-      id: created.id,
-      label: `the service token "${name}"`,
-      publicKey: body.publicKey,
-    },
+  await pinConfirmedPublicKeys(projectId, [
+    tokenKeyOwner({ id: created.id, name, publicKey: body.publicKey }),
   ]);
   const token = `envy_${tokenId}_${await toBase64Url(tokenKeys.privateKey)}`;
   await clearKey(tokenKeys.privateKey);

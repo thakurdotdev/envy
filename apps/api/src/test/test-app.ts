@@ -2,6 +2,7 @@ import { createApp } from "../app.ts";
 import type { Config } from "../config.ts";
 import { silentLogger } from "../lib/logger.ts";
 import type { GitHubUser } from "../modules/auth/github.ts";
+import { createRepositories } from "../repositories.ts";
 import { createTestDatabase } from "./database.ts";
 import { createFakeGitHub } from "./fake-github.ts";
 
@@ -62,6 +63,8 @@ export async function createTestApp(overrides: Partial<Config> = {}) {
     request,
     traffic,
     database: testDatabase.database,
+    /** Direct database access, for tests that play a hacked server. */
+    repositories: createRepositories(testDatabase.database),
     advanceClock(milliseconds: number) {
       now = new Date(now.getTime() + milliseconds);
     },

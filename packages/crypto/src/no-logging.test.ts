@@ -20,11 +20,20 @@ describe("no logging", () => {
     const member = await crypto.generateUserKeys();
     const envKey = await crypto.generateEnvKey();
     const place = { projectId: "p", environmentId: "e", version: 1, keyVersion: 1 };
-    const wrapped = await crypto.wrapEnvKey(envKey, member.publicKey);
+    const keyPlace = { environmentId: "e", keyVersion: 1 };
+    const wrapped = await crypto.wrapEnvKey(envKey, {
+      recipientPublicKey: member.publicKey,
+      senderPrivateKey: member.privateKey,
+      place: keyPlace,
+    });
     const encrypted = await crypto.encryptSecrets({ A: "b" }, envKey, place);
     await crypto.decryptSecrets(
       encrypted,
-      await crypto.unwrapEnvKey(wrapped, member.privateKey),
+      await crypto.unwrapEnvKey(wrapped, {
+        recipientPrivateKey: member.privateKey,
+        senderPublicKey: member.publicKey,
+        place: keyPlace,
+      }),
       place,
     );
     await crypto.decryptSecrets(encrypted, await crypto.generateEnvKey(), place).catch(() => {});

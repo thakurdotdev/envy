@@ -1,4 +1,5 @@
-import { decryptSecrets, fromBase64Url, unwrapEnvKey } from "@envy/crypto";
+import { decryptSecrets, fromBase64Url } from "@envy/crypto";
+import { fetchEnvKey } from "../core/env-keys.ts";
 import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
 import { CliError } from "../core/errors.ts";
 import { pullEnvironment, pushEnvironment } from "../core/secrets.ts";
@@ -50,12 +51,16 @@ export async function rollback(versionText: string, options: EnvironmentOptions)
   if (old === null) {
     throw new CliError(`${environment.name} has no version ${version}.`);
   }
-  const oldKey = await session.call((api) =>
-    api.v1.environments({ id: environment.id }).key.get({ query: { keyVersion: old.keyVersion } }),
-  );
+  const oldKey = await fetchEnvKey({
+    session,
+    keys,
+    projectId,
+    environment,
+    keyVersion: old.keyVersion,
+  });
   const oldSecrets = await decryptSecrets(
     { ciphertext: await fromBase64Url(old.ciphertext), nonce: await fromBase64Url(old.nonce) },
-    await unwrapEnvKey(await fromBase64Url(oldKey.wrappedKey), keys.privateKey),
+    oldKey,
     { projectId, environmentId: environment.id, version: old.version, keyVersion: old.keyVersion },
   );
 

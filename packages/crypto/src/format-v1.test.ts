@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { fromBase64Url } from "./encoding.ts";
-import { unwrapEnvKey } from "./env-keys.ts";
+import { unwrapLegacyEnvKey } from "./env-keys.ts";
 import { fingerprint } from "./fingerprint.ts";
 import { DEFAULT_KDF_PARAMS, deriveMasterKey } from "./master-key.ts";
 import { decryptSecrets } from "./secrets.ts";
@@ -55,7 +55,7 @@ describe("format version 1 data stays readable", () => {
   test("wrapped environment key", async () => {
     const wrapped = await fromBase64Url(stored.wrappedEnvKey);
 
-    expect(await unwrapEnvKey(wrapped, memberPrivateKey)).toEqual(envKey);
+    expect(await unwrapLegacyEnvKey(wrapped, memberPrivateKey)).toEqual(envKey);
   });
 
   test("fingerprint", async () => {

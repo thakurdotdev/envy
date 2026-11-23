@@ -1,4 +1,4 @@
-import { decryptSecrets, fromBase64Url, isCryptoError, unwrapEnvKey } from "@envy/crypto";
+import { decryptSecrets, fromBase64Url, isCryptoError } from "@envy/crypto";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { desc, eq } from "drizzle-orm";
 import { secretVersions } from "../../db/schema.ts";
@@ -231,10 +231,11 @@ describe("removing a member", () => {
       `/v1/environments/${development.environmentId}/key?keyVersion=2`,
       { accessToken: staying.accessToken },
     );
-    const stayingKey = await unwrapEnvKey(
-      await fromBase64Url(readField(keyResponse.body, "wrappedKey")),
-      staying.keys.privateKey,
-    );
+    expect(keyResponse.body).toMatchObject({
+      keyVersion: 2,
+      sender: { userId: owner.userId, githubLogin: "owner" },
+    });
+    const stayingKey = await fetchEnvKey(testApp, staying, development.environmentId, 2);
     expect(stayingKey).not.toEqual(keptKey);
 
     // Everyone who stays can still pull every environment.

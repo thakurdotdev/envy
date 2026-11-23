@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useSession, useUnlocked } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "./brand-mark";
+import { ConfirmKeysDialog } from "./confirm-keys-dialog";
 import { SessionGate } from "./session-gate";
 
 // Pages that belong to a project, so "Projects" stays highlighted on them.
@@ -35,6 +36,7 @@ export function DashboardFrame({ children }: { children: ReactNode }) {
       <main id="main" className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         {children}
       </main>
+      <ConfirmKeysDialog />
     </SessionGate>
   );
 }

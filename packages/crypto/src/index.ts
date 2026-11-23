@@ -6,7 +6,7 @@ export { ready } from "./sodium.ts";
 export { CryptoError, isCryptoError, type CryptoErrorCode } from "./errors.ts";
 export { clearKey } from "./memory.ts";
 export { fromBase64Url, toBase64Url } from "./encoding.ts";
-export { FORMAT_VERSION_1 } from "./format.ts";
+export { FORMAT_VERSION_1, FORMAT_VERSION_2 } from "./format.ts";
 export {
   DEFAULT_KDF_PARAMS,
   deriveMasterKey,
@@ -24,7 +24,14 @@ export {
   type UserKeys,
 } from "./user-keys.ts";
 export { generateRecoveryKey, parseRecoveryKey, type RecoveryKey } from "./recovery-key.ts";
-export { generateEnvKey, unwrapEnvKey, wrapEnvKey } from "./env-keys.ts";
+export {
+  generateEnvKey,
+  isLegacyWrappedEnvKey,
+  unwrapEnvKey,
+  unwrapLegacyEnvKey,
+  wrapEnvKey,
+  type EnvKeyPlace,
+} from "./env-keys.ts";
 export {
   decryptSecrets,
   encryptSecrets,
