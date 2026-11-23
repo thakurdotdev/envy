@@ -1,28 +1,48 @@
 import { DotenvParseError, parseDotenv, serializeDotenv, type DotenvVariables } from "@envy/shared";
 import { readFile, realpath } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { writeFileSafely } from "./settings.ts";
 import { CliError } from "./errors.ts";
 import { isInsideFolder, type FoundProjectLink } from "./project-link.ts";
 
 /**
  * The full path of the file `envy pull` writes and `envy push` reads.
- * Refuses a symbolic link that points outside the project folder: a cloned
- * repo could ship one to make envy read or replace some other file.
+ * Refuses a path that leads outside the project folder through a symbolic
+ * link, either the file itself or one of its folders: a cloned repo could
+ * ship one to make envy read or replace some other file.
  */
 export async function projectEnvFilePath(found: FoundProjectLink): Promise<string> {
   const path = join(found.folder, found.link.file);
-  const target = await realpath(path).catch(() => undefined);
-  if (target === undefined) {
-    return path;
-  }
   const folder = await realpath(found.folder);
-  if (!isInsideFolder(relative(folder, target))) {
-    throw new CliError(`${found.link.file} is a link to a file outside this project.`, {
-      hint: `Replace ${found.link.file} with a regular file, then try again.`,
+  const target = await realpathOfNearestExisting(path);
+  if (!isInsideFolder(relative(folder, target)) || target === folder) {
+    throw new CliError(`${found.link.file} leads to a file outside this project.`, {
+      hint: `Make ${found.link.file} and its folders regular files and folders, not links, then try again.`,
     });
   }
   return path;
+}
+
+/**
+ * The real path of `path`, or of its nearest parent folder that exists when
+ * the file is not there yet. A missing file is still checked this way,
+ * because the folder it would be written into could be a link.
+ */
+async function realpathOfNearestExisting(path: string): Promise<string> {
+  let current = path;
+  const missingParts: string[] = [];
+  for (;;) {
+    const real = await realpath(current).catch(() => undefined);
+    if (real !== undefined) {
+      return join(real, ...missingParts);
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return path;
+    }
+    missingParts.unshift(basename(current));
+    current = parent;
+  }
 }
 
 /** Reads a .env file. Returns undefined if it does not exist. */
