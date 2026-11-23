@@ -1,6 +1,6 @@
 import { cors } from "@elysiajs/cors";
 import { Elysia } from "elysia";
-import type { Config } from "./config.ts";
+import { servesOverHttps, type Config } from "./config.ts";
 import type { Database } from "./db/client.ts";
 import type { Clock } from "./lib/clock.ts";
 import { httpBasics } from "./lib/http.ts";
@@ -93,7 +93,7 @@ export function createApp(dependencies: AppDependencies) {
 
   return new Elysia()
     .use(httpBasics(logger, { writeLimiter, trustedProxies: config.trustedProxies }))
-    .use(securityHeaders(config.environment === "production"))
+    .use(securityHeaders(servesOverHttps(config)))
     .use(cors({ origin: config.webUrl, credentials: true }))
     .get("/health", () => ({ status: "ok" as const }))
     .use(authRoutes({ auth, authenticate, writeLimiter, config, rateLimiters }))

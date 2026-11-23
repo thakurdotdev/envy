@@ -3,7 +3,7 @@
 // failing later in the middle of a request.
 
 export type Config = {
-  /** "production" turns on secure cookies. */
+  /** "production" requires https addresses. See servesOverHttps for cookies. */
   environment: "development" | "test" | "production";
   port: number;
   databaseUrl: string;
@@ -71,6 +71,17 @@ export function loadConfig(environment: Environment): Config {
 }
 
 /**
+ * True when cookies must be Secure and browsers told to use HTTPS only. It
+ * follows the API address as well as APP_ENV, so a public deploy that forgets
+ * APP_ENV=production still never sends its refresh cookie over plain HTTP.
+ */
+export function servesOverHttps(config: Pick<Config, "environment" | "apiUrl">): boolean {
+  return config.environment === "production" || config.apiUrl.startsWith("https:");
+}
+
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
  * Settings that work but are probably a mistake. The server still starts, so
  * a deploy is never stopped by them; they are logged as warnings at boot.
  */
@@ -82,6 +93,12 @@ export function configWarnings(config: Config): string[] {
     // shows its address (often 127.0.0.1) and all users share one rate limit.
     warnings.push(
       "TRUST_PROXY is 0, so client addresses are the proxy's own. Set TRUST_PROXY to the number of proxies in front of the API (see docs/deploy.md).",
+    );
+  }
+  const apiHost = URL.parse(config.apiUrl)?.hostname ?? "";
+  if (config.environment !== "production" && !LOOPBACK_HOSTS.has(apiHost)) {
+    warnings.push(
+      `APP_ENV is ${config.environment} but API_URL is not this machine. Set APP_ENV=production for a real deploy.`,
     );
   }
   return warnings;

@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import type { Config } from "../../config.ts";
+import { servesOverHttps, type Config } from "../../config.ts";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { requireUser } from "../../lib/request-context.ts";
 import { AppError } from "../../lib/errors.ts";
@@ -23,7 +23,7 @@ type AuthRoutesDependencies = {
   auth: AuthService;
   authenticate: Authenticate;
   writeLimiter: RateLimiter;
-  config: Pick<Config, "environment" | "webUrl" | "trustedProxies">;
+  config: Pick<Config, "environment" | "apiUrl" | "webUrl" | "trustedProxies">;
   rateLimiters: AuthRateLimiters;
 };
 
@@ -34,7 +34,7 @@ export function authRoutes({
   config,
   rateLimiters,
 }: AuthRoutesDependencies) {
-  const secure = config.environment === "production";
+  const secure = servesOverHttps(config);
   const refreshCookie = {
     httpOnly: true,
     secure,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ConfigError, configWarnings, loadConfig } from "./config.ts";
+import { ConfigError, configWarnings, loadConfig, servesOverHttps } from "./config.ts";
 
 const validEnvironment = {
   DATABASE_URL: "postgres://appuser:appuser@localhost:5432/envy",
@@ -56,6 +56,13 @@ describe("loadConfig", () => {
     expect(config.environment).toBe("production");
   });
 
+  test("an https API address means secure cookies, even without APP_ENV", () => {
+    expect(servesOverHttps(loadConfig(validEnvironment))).toBe(false);
+    expect(
+      servesOverHttps(loadConfig({ ...validEnvironment, API_URL: "https://api.example.com" })),
+    ).toBe(true);
+  });
+
   test("TRUST_PROXY is a number of proxies; true and false still work", () => {
     expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "2" }).trustedProxies).toBe(2);
     expect(loadConfig({ ...validEnvironment, TRUST_PROXY: "true" }).trustedProxies).toBe(1);
@@ -81,5 +88,13 @@ describe("configWarnings", () => {
   test("stays quiet with a proxy count, or outside production", () => {
     expect(configWarnings(loadConfig({ ...production, TRUST_PROXY: "1" }))).toEqual([]);
     expect(configWarnings(loadConfig(validEnvironment))).toEqual([]);
+  });
+
+  test("warns when a public address runs without APP_ENV=production", () => {
+    const warnings = configWarnings(
+      loadConfig({ ...validEnvironment, API_URL: "https://api.example.com" }),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("APP_ENV");
   });
 });
