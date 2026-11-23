@@ -55,7 +55,7 @@ function redactValue(value: unknown, depth: number): unknown {
     return "[too deep]";
   }
   if (value instanceof Error) {
-    return { name: value.name, message: value.message };
+    return describeError(value);
   }
   if (Array.isArray(value)) {
     return value.map((item: unknown) => redactValue(item, depth + 1));
@@ -64,4 +64,37 @@ function redactValue(value: unknown, depth: number): unknown {
     return redact(Object.fromEntries(Object.entries(value)), depth);
   }
   return value;
+}
+
+// Drizzle puts every query value in the error message ("Failed query: …
+// params: …"), and Postgres repeats values in its own messages ("Key
+// (email)=(…) already exists"). Values can be wrapped keys, ciphertext or
+// emails, so an error is logged by its name, its Postgres error code and the
+// query text only. The query text holds placeholders ($1), never values.
+const FAILED_QUERY_PATTERN = /^Failed query: ([\s\S]*?)\nparams: /;
+const MAX_MESSAGE_LENGTH = 300;
+
+function describeError(error: Error): Record<string, string> {
+  const failedQuery = FAILED_QUERY_PATTERN.exec(error.message);
+  const message =
+    failedQuery?.[1] === undefined ? error.message : `Failed query: ${failedQuery[1]}`;
+  const described: Record<string, string> = {
+    name: error.name,
+    message: message.slice(0, MAX_MESSAGE_LENGTH),
+  };
+  const databaseCode = postgresErrorCode(error.cause);
+  if (databaseCode !== undefined) {
+    described["databaseCode"] = databaseCode;
+  }
+  return described;
+}
+
+/** The five-character Postgres error code, such as 23505 for a duplicate. */
+function postgresErrorCode(cause: unknown): string | undefined {
+  if (typeof cause !== "object" || cause === null || !("code" in cause)) {
+    return undefined;
+  }
+  return typeof cause.code === "string" && /^[0-9A-Z]{5}$/.test(cause.code)
+    ? cause.code
+    : undefined;
 }
