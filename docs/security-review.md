@@ -109,3 +109,37 @@ Not changed, worth knowing:
   fingerprints is the defence.
 - JavaScript cannot guarantee that zeroed buffers have no other copies.
 - A leaked service token can read its environment until revoked or expired.
+
+## Third audit (2026-11-23)
+
+A full review of the crypto package, CLI, API and web dashboard, with the
+server treated as hostile, as the threat model says. Two findings were
+confirmed with working attacks before they were fixed. The fixes are in
+ADR 0016 and ADR 0017.
+
+| Severity | Finding                                                                                                                                                                                                      | Fix                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| High     | Wrapped environment keys were anonymous sealed boxes. A server could make its own key as a new key version and read every later push, or serve made-up secrets (such as `NODE_OPTIONS`) to `envy run` and CI | Format 2 wrapped keys prove their sender and are bound to environment and key version; clients accept only trusted senders |
+| High     | Every member key the CLI had not seen was trusted silently, so a server could add a fake member and the next rotation or `envy env add` wrapped the new key for it                                           | Trust on first use once per project; afterwards a new key needs its fingerprint confirmed                                  |
+| Medium   | The web dashboard had none of the CLI's trust checks: no pinned keys, no rollback check, keys wrapped for whatever the server listed                                                                         | Same rules as the CLI, shared in `packages/shared`, stored in browser storage                                              |
+| Medium   | `envy pull` skipped the symbolic link check when the file did not exist yet, so a committed folder link let it write outside the project                                                                     | The real path of the nearest existing folder is checked                                                                    |
+| Medium   | The recovery key could not be used and the master password could not be changed                                                                                                                              | `envy password`, `envy recover` and the same in the dashboard, behind a proof of the private key                           |
+| Low      | Drizzle put query values (wrapped keys, ciphertext, emails) in error messages, which the logger wrote out on unexpected database errors                                                                      | Errors are logged by name, query text and Postgres code only                                                               |
+| Low      | Forgetting `APP_ENV=production` sent the refresh cookie without `Secure` and skipped HSTS                                                                                                                    | An https `API_URL` turns both on; a warning for a public address without production                                        |
+| Low      | Double-quoted `.env` values did not escape `$` or backticks, so `source .env` could run a pushed command                                                                                                     | Both are escaped, and read back by the parser                                                                              |
+| Low      | Creating an environment, granting and removing a member checked their lists outside the transaction, so a member removed at the same moment could keep a key                                                 | A row lock on the project, and the checks inside the transaction                                                           |
+
+Checked and found sound: AEAD use and AAD binding, Argon2id bounds, recovery
+key checksums, JWT algorithm pinning, refresh rotation and reuse detection,
+OAuth `state`, the cookie refresh origin check, verified emails for invites,
+role checks, service-token scoping, soft-deleted projects, input validation,
+rate-limit addresses, CSP, the browser key wipe, the install script and
+upgrade checksums, actions pinned to SHAs.
+
+Still open, worth knowing (also in ADR 0016 and the threat model):
+
+- A service token in CI trusts the first sender it sees, because it has
+  nobody to ask and usually no saved state.
+- A removed member working with the server can still make a key that other
+  devices accept.
+- The dashboard is only as trustworthy as whoever serves its JavaScript.

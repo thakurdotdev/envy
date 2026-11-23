@@ -98,7 +98,7 @@ async function pollUntilApproved(
   });
 }
 
-function showRecoveryKey(recoveryKeyText: string): void {
+export function showRecoveryKey(recoveryKeyText: string): void {
   output.info("");
   output.warn("Your recovery key. Write it down and keep it somewhere safe:");
   output.info("");

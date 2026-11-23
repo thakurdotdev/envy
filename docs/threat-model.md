@@ -94,6 +94,8 @@ All of this is in `packages/crypto` and tested there.
 | Password, token or invite guessing         | Account abuse                        | Rate limits per IP and per user; long random tokens; tokens stored as hashes                                       |
 | Malicious `.envy.json` in a cloned repo    | Overwrite or upload other files      | `file` must stay inside the project folder; links (the file or any folder on its path) leading outside are refused |
 | Weak master password                       | Leaked data could be cracked offline | Argon2id slows this down but cannot stop it for very weak passwords; the UI should ask for a strong one            |
+| Lost master password                       | Recovery key gets the user back in   | `envy recover` or the unlock screen; a new master password and a new recovery key are set (ADR 0017)               |
+| Leaked master password                     | Future copies stay safe              | `envy password` or the settings page re-encrypts the private key; replacing it needs proof of the key (ADR 0017)   |
 | Lost master password and recovery key      | Data is gone for that user           | By design. An admin can grant access again with a new keypair                                                      |
 
 ## Trust on the client

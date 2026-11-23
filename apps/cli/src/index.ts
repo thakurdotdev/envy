@@ -4,6 +4,7 @@ import { CLI_COMMAND } from "@envy/shared";
 import { Command } from "commander";
 import packageJson from "../package.json" with { type: "json" };
 import { init } from "./commands/init.ts";
+import { changeMasterPassword, recoverWithRecoveryKey } from "./commands/keys.ts";
 import { login } from "./commands/login.ts";
 import { logout } from "./commands/logout.ts";
 import { pull } from "./commands/pull.ts";
@@ -48,6 +49,13 @@ program
   .description("sign in with GitHub and unlock your keys on this device")
   .option("--api-url <url>", "use your own Envy server")
   .action(login);
+
+program.command("password").description("change your master password").action(changeMasterPassword);
+
+program
+  .command("recover")
+  .description("forgot your master password? get back in with your recovery key")
+  .action(recoverWithRecoveryKey);
 
 program
   .command("logout")

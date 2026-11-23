@@ -9,12 +9,18 @@ import { errorMessage } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { AuthLayout } from "./auth-layout";
 import { PasswordInput } from "./password-input";
+import { Recover } from "./recover";
 
 export function Unlock({ githubLogin }: { githubLogin: string }) {
   const session = useSession();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+
+  if (recovering) {
+    return <Recover onCancel={() => setRecovering(false)} />;
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -41,6 +47,14 @@ export function Unlock({ githubLogin }: { githubLogin: string }) {
       }
       footer={
         <>
+          <button
+            type="button"
+            className="underline underline-offset-4 hover:text-foreground"
+            onClick={() => setRecovering(true)}
+          >
+            Forgot it? Use your recovery key
+          </button>
+          <span aria-hidden="true"> · </span>
           Not you?{" "}
           <button
             type="button"
