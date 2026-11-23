@@ -27,17 +27,17 @@ CREATE DATABASE envy_staging OWNER appuser;
 
 Environment variables (the API refuses to start if one is missing or wrong):
 
-| Variable               | Example                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `APP_ENV`              | `production` (turns on secure cookies and HSTS)                                          |
-| `PORT`                 | set by Shipyard                                                                          |
-| `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network)       |
-| `API_URL`              | `https://api.<domain>`                                                                   |
-| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                         |
-| `JWT_SECRET`           | `openssl rand -base64 48`                                                                |
-| `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                                |
-| `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                                |
-| `TRUST_PROXY`          | `1`: nginx appends the visitor's address (restored from Cloudflare) to `X-Forwarded-For` |
+| Variable               | Example                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `APP_ENV`              | `production` (requires https addresses; an https `API_URL` alone already turns on secure cookies and HSTS) |
+| `PORT`                 | set by Shipyard                                                                                            |
+| `DATABASE_URL`         | `postgres://appuser:…@localhost:5432/envy` (add `?sslmode=require` over a network)                         |
+| `API_URL`              | `https://api.<domain>`                                                                                     |
+| `WEB_URL`              | `https://envy.thakur.dev` (CORS allow-list and sign-in redirect)                                           |
+| `JWT_SECRET`           | `openssl rand -base64 48`                                                                                  |
+| `GITHUB_CLIENT_ID`     | from the GitHub OAuth app                                                                                  |
+| `GITHUB_CLIENT_SECRET` | from the GitHub OAuth app                                                                                  |
+| `TRUST_PROXY`          | `1`: nginx appends the visitor's address (restored from Cloudflare) to `X-Forwarded-For`                   |
 
 GitHub OAuth app: enable **Device Flow**; callback URL
 `https://api.<domain>/v1/auth/github/callback`.
