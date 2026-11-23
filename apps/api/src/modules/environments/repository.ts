@@ -5,10 +5,13 @@ import {
   environments,
   projects,
   secretVersions,
+  users,
   type EnvironmentRow,
 } from "../../db/schema.ts";
 
 export type NewEnvironment = {
+  /** Chosen by the client, so wrapped keys can be bound to it before it exists (ADR 0016). */
+  id: string;
   projectId: string;
   name: string;
   isShared: boolean;
@@ -22,6 +25,12 @@ export type NewWrappedKey = {
   recipientId: string;
   wrappedKey: string;
   createdBy: string;
+};
+
+/** A wrapped key and who made it. Clients check the maker before trusting it. */
+export type WrappedKeyWithSender = {
+  wrappedKey: string;
+  sender: { userId: string; githubLogin: string; publicKey: string };
 };
 
 export function createEnvironmentRepository(executor: Executor) {
@@ -83,10 +92,16 @@ export function createEnvironmentRepository(executor: Executor) {
       keyVersion: number;
       recipientType: "user" | "token";
       recipientId: string;
-    }): Promise<string | undefined> {
+    }): Promise<WrappedKeyWithSender | undefined> {
       const [row] = await executor
-        .select({ wrappedKey: environmentKeys.wrappedKey })
+        .select({
+          wrappedKey: environmentKeys.wrappedKey,
+          senderId: users.id,
+          senderGithubLogin: users.githubLogin,
+          senderPublicKey: users.publicKey,
+        })
         .from(environmentKeys)
+        .innerJoin(users, eq(users.id, environmentKeys.createdBy))
         .where(
           and(
             eq(environmentKeys.environmentId, input.environmentId),
@@ -95,7 +110,17 @@ export function createEnvironmentRepository(executor: Executor) {
             eq(environmentKeys.recipientId, input.recipientId),
           ),
         );
-      return row?.wrappedKey;
+      if (row === undefined) {
+        return undefined;
+      }
+      return {
+        wrappedKey: row.wrappedKey,
+        sender: {
+          userId: row.senderId,
+          githubLogin: row.senderGithubLogin,
+          publicKey: row.senderPublicKey ?? "",
+        },
+      };
     },
   };
 }

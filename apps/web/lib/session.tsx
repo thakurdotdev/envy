@@ -19,7 +19,9 @@ import {
   signOut as apiSignOut,
 } from "./api";
 import { clearLoadCache } from "@/hooks/use-load";
+import type { ConfirmNewKeys, KeyOwner } from "@envy/shared";
 import { setUpKeys, unlockKeys, type StoredKeys, type UnlockedKeys } from "./envy";
+import { browserTrustStore, type KeyPair } from "./trust";
 
 export type Profile = {
   id: string;
@@ -37,8 +39,16 @@ export type SessionState =
   | { status: "locked"; profile: Profile }
   | { status: "unlocked"; profile: Profile; keys: UnlockedKeys };
 
+/** Keys this browser has not seen, waiting for the person to confirm them. */
+export type KeyConfirmation = {
+  owners: Array<KeyOwner & { fingerprint: string }>;
+  answer: (trusted: boolean) => void;
+};
+
 // Function-typed properties (not methods), so they can be passed straight to onClick.
 type SessionActions = {
+  /** Set while a key check waits for the person; ConfirmKeysDialog shows it. */
+  keyConfirmation: KeyConfirmation | undefined;
   unlock: (password: string) => Promise<void>;
   setUp: (password: string) => Promise<string>;
   finishSetUp: () => void;
@@ -58,6 +68,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const keysRef = useRef<UnlockedKeys | undefined>(undefined);
   // Held between set-up and "I saved my recovery key", so the page can show the key first.
   const pendingKeysRef = useRef<{ profile: Profile; keys: UnlockedKeys } | undefined>(undefined);
+  const [keyConfirmation, setKeyConfirmation] = useState<KeyConfirmation | undefined>();
+  const answerRef = useRef<((trusted: boolean) => void) | undefined>(undefined);
+
+  // Asks through ConfirmKeysDialog and waits for the answer.
+  const confirmNewKeys = useCallback<ConfirmNewKeys>(
+    (owners) =>
+      new Promise<boolean>((resolve) => {
+        const answer = (trusted: boolean) => {
+          answerRef.current = undefined;
+          setKeyConfirmation(undefined);
+          resolve(trusted);
+        };
+        answerRef.current = answer;
+        setKeyConfirmation({ owners, answer });
+      }),
+    [],
+  );
+
+  const withTrust = useCallback(
+    (profile: Profile, pair: KeyPair): UnlockedKeys => ({
+      ...pair,
+      trust: { store: browserTrustStore(profile.id), confirm: confirmNewKeys },
+    }),
+    [confirmNewKeys],
+  );
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -92,6 +127,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(() => {
     const keys = keysRef.current;
     keysRef.current = undefined;
+    // A question left open when the session locks counts as "no".
+    answerRef.current?.(false);
     // Project names, members and the like go too: nothing outlives the unlock.
     clearLoadCache();
     if (keys !== undefined) {
@@ -127,11 +164,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo<SessionActions>(
     () => ({
+      keyConfirmation,
       async unlock(password) {
         if (state.status !== "locked" || state.profile.keys === null) {
           return;
         }
-        const keys = await unlockKeys(password, state.profile.keys);
+        const keys = withTrust(state.profile, await unlockKeys(password, state.profile.keys));
         keysRef.current = keys;
         setState({ status: "unlocked", profile: state.profile, keys });
       },
@@ -140,7 +178,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           throw new Error("Keys are already set up.");
         }
         const { keys, recoveryKeyText } = await setUpKeys(password);
-        pendingKeysRef.current = { profile: state.profile, keys };
+        pendingKeysRef.current = { profile: state.profile, keys: withTrust(state.profile, keys) };
         return recoveryKeyText;
       },
       finishSetUp() {
@@ -162,7 +200,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         void load();
       },
     }),
-    [state, lock, load],
+    [state, lock, load, keyConfirmation, withTrust],
   );
 
   return (

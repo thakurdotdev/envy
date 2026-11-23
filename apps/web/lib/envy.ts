@@ -13,18 +13,30 @@ import {
   generateUserKeys,
   getPublicKey,
   toBase64Url,
-  unwrapEnvKey,
   wrapEnvKey,
   type KdfParams,
   type Secrets,
 } from "@envy/crypto";
+import { newUuidV7s } from "@envy/shared";
 import { ApiError, call } from "./api";
+import {
+  checkNotRolledBack,
+  memberKeyOwner,
+  openTrustedEnvKey,
+  pinConfirmedPublicKeys,
+  rememberEnvironmentVersion,
+  tokenKeyOwner,
+  trustRecipients,
+  type KeyPair,
+  type WebTrust,
+} from "./trust";
 
 // Every encrypt and decrypt the dashboard does happens here, in the browser,
 // with packages/crypto (the same code the CLI uses). Only ciphertext and
 // wrapped keys are sent to the API.
 
-export type UnlockedKeys = { publicKey: Uint8Array; privateKey: Uint8Array };
+/** The unlocked key pair, and this account's trust store (ADR 0016). */
+export type UnlockedKeys = KeyPair & { trust: WebTrust };
 
 export type EnvironmentSummary = {
   id: string;
@@ -46,7 +58,7 @@ export const MINIMUM_PASSWORD_LENGTH = 10;
 /** First set-up on this account: returns the recovery key text to show once. */
 export async function setUpKeys(
   password: string,
-): Promise<{ keys: UnlockedKeys; recoveryKeyText: string }> {
+): Promise<{ keys: KeyPair; recoveryKeyText: string }> {
   const { publicKey, privateKey } = await generateUserKeys();
   const salt = await generateSalt();
   const masterKey = await deriveMasterKey(password, salt, DEFAULT_KDF_PARAMS);
@@ -70,7 +82,7 @@ export async function setUpKeys(
 }
 
 /** Throws a CryptoError with DECRYPTION_FAILED for a wrong password. */
-export async function unlockKeys(password: string, stored: StoredKeys): Promise<UnlockedKeys> {
+export async function unlockKeys(password: string, stored: StoredKeys): Promise<KeyPair> {
   const masterKey = await deriveMasterKey(
     password,
     await fromBase64Url(stored.kdfSalt),
@@ -87,55 +99,111 @@ export async function unlockKeys(password: string, stored: StoredKeys): Promise<
   }
 }
 
+/** Wraps an environment key for one recipient, from this user, bound to its place. */
+async function wrapFor(
+  envKey: Uint8Array,
+  keys: KeyPair,
+  recipientPublicKey: string | Uint8Array,
+  place: { environmentId: string; keyVersion: number },
+): Promise<string> {
+  const recipient =
+    typeof recipientPublicKey === "string"
+      ? await fromBase64Url(recipientPublicKey)
+      : recipientPublicKey;
+  return toBase64Url(
+    await wrapEnvKey(envKey, {
+      recipientPublicKey: recipient,
+      senderPrivateKey: keys.privateKey,
+      place,
+    }),
+  );
+}
+
+const STARTER_ENVIRONMENTS = ["shared", "development", "staging", "production"] as const;
+
 export async function createProject(keys: UnlockedKeys, name: string) {
   const environmentKeys = { shared: "", development: "", staging: "", production: "" };
-  for (const environmentName of ["shared", "development", "staging", "production"] as const) {
+  const environmentIds = { ...environmentKeys };
+  // Ids are chosen here so each key can be bound to its environment (ADR 0016).
+  const ids = newUuidV7s(STARTER_ENVIRONMENTS.length);
+  for (const [index, environmentName] of STARTER_ENVIRONMENTS.entries()) {
+    const environmentId = ids[index] ?? "";
+    environmentIds[environmentName] = environmentId;
     const envKey = await generateEnvKey();
-    environmentKeys[environmentName] = await toBase64Url(await wrapEnvKey(envKey, keys.publicKey));
+    environmentKeys[environmentName] = await wrapFor(envKey, keys, keys.publicKey, {
+      environmentId,
+      keyVersion: 1,
+    });
     await clearKey(envKey);
   }
-  return call((api) => api.v1.projects.post({ name, environmentKeys }));
+  return call((api) => api.v1.projects.post({ name, environmentKeys, environmentIds }));
 }
 
 export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
   return (await call((api) => api.v1.projects({ id: projectId }).environments.get())).items;
 }
 
+type EnvironmentRef = { id: string; name: string };
+
+/** Fetches this user's copy of an environment key and opens it, after checking who made it. */
 async function getEnvKey(
   keys: UnlockedKeys,
-  environmentId: string,
+  projectId: string,
+  environment: EnvironmentRef,
   keyVersion: number,
 ): Promise<Uint8Array> {
-  const result = await call((api) =>
-    api.v1.environments({ id: environmentId }).key.get({ query: { keyVersion } }),
+  const key = await call((api) =>
+    api.v1.environments({ id: environment.id }).key.get({ query: { keyVersion } }),
   );
-  return unwrapEnvKey(await fromBase64Url(result.wrappedKey), keys.privateKey);
+  return openTrustedEnvKey(keys.trust, keys, { projectId, environment, key });
 }
 
-/** One version (or the latest), decrypted. An empty environment is version 0. */
+/**
+ * One version (or the latest), decrypted. An empty environment is version 0.
+ * The latest is checked against what this browser saw before, so a server
+ * cannot quietly hand out an older version.
+ */
 export async function pullEnvironment(
   keys: UnlockedKeys,
   projectId: string,
-  environmentId: string,
+  environment: EnvironmentSummary,
   version?: number,
 ): Promise<{ version: number; secrets: Secrets }> {
   const query = version === undefined ? {} : { version };
   const { current } = await call((api) =>
-    api.v1.environments({ id: environmentId }).secrets.get({ query }),
+    api.v1.environments({ id: environment.id }).secrets.get({ query }),
   );
+  const isLatest = version === undefined;
+  if (isLatest) {
+    await checkNotRolledBack(keys.trust, environment, {
+      version: current?.version ?? 0,
+      keyVersion: environment.currentKeyVersion,
+    });
+  }
   if (current === null) {
     return { version: 0, secrets: {} };
   }
-  const envKey = await getEnvKey(keys, environmentId, current.keyVersion);
+  const envKey = await getEnvKey(keys, projectId, environment, current.keyVersion);
   const secrets = await decryptSecrets(
     {
       ciphertext: await fromBase64Url(current.ciphertext),
       nonce: await fromBase64Url(current.nonce),
     },
     envKey,
-    { projectId, environmentId, version: current.version, keyVersion: current.keyVersion },
+    {
+      projectId,
+      environmentId: environment.id,
+      version: current.version,
+      keyVersion: current.keyVersion,
+    },
   );
   await clearKey(envKey);
+  if (isLatest) {
+    await rememberEnvironmentVersion(keys.trust, environment, {
+      version: current.version,
+      keyVersion: current.keyVersion,
+    });
+  }
   return { version: current.version, secrets };
 }
 
@@ -149,7 +217,10 @@ export async function pushEnvironment(input: {
 }): Promise<number> {
   const { keys, projectId, environment } = input;
   const keyVersion = environment.currentKeyVersion;
-  const envKey = await getEnvKey(keys, environment.id, keyVersion);
+  // A server must not get new secrets encrypted with an older key, or with
+  // a key it made itself (ADR 0013, ADR 0016).
+  await checkNotRolledBack(keys.trust, environment, { version: input.baseVersion, keyVersion });
+  const envKey = await getEnvKey(keys, projectId, environment, keyVersion);
   const encrypted = await encryptSecrets(input.secrets, envKey, {
     projectId,
     environmentId: environment.id,
@@ -167,6 +238,10 @@ export async function pushEnvironment(input: {
   const created = await call((api) =>
     api.v1.environments({ id: environment.id }).secrets.post(body),
   );
+  await rememberEnvironmentVersion(keys.trust, environment, {
+    version: created.version,
+    keyVersion,
+  });
   return created.version;
 }
 
@@ -189,14 +264,19 @@ export async function grantMember(
   if (member.publicKey === null) {
     throw new ApiError("KEYS_NOT_SET", `@${member.githubLogin} has not set up their keys yet.`);
   }
-  const memberPublicKey = await fromBase64Url(member.publicKey);
+  // The grant dialog had the admin check this fingerprint, so pin it now.
+  await pinConfirmedPublicKeys(keys.trust, projectId, memberKeyOwner(member));
   const wrappedKeys: Array<{ environmentId: string; keyVersion: number; wrappedKey: string }> = [];
   for (const environment of await listEnvironments(projectId)) {
-    const envKey = await getEnvKey(keys, environment.id, environment.currentKeyVersion);
+    const keyVersion = environment.currentKeyVersion;
+    const envKey = await getEnvKey(keys, projectId, environment, keyVersion);
     wrappedKeys.push({
       environmentId: environment.id,
-      keyVersion: environment.currentKeyVersion,
-      wrappedKey: await toBase64Url(await wrapEnvKey(envKey, memberPublicKey)),
+      keyVersion,
+      wrappedKey: await wrapFor(envKey, keys, member.publicKey, {
+        environmentId: environment.id,
+        keyVersion,
+      }),
     });
     await clearKey(envKey);
   }
@@ -231,6 +311,12 @@ export async function removeMember(
     (candidate) => candidate.id !== member.id && candidate.status === "active",
   );
   const activeTokens = await listActiveTokens(projectId);
+  // A hacked server could list a fake member or token; new keys go only to
+  // keys this browser trusts, and new ones need the admin's yes.
+  await trustRecipients(keys.trust, keys, projectId, [
+    ...staying.flatMap(memberKeyOwner),
+    ...activeTokens.map(tokenKeyOwner),
+  ]);
   const rotations: Rotation[] = [];
   for (const environment of await listEnvironments(projectId)) {
     const newKeyVersion = environment.currentKeyVersion + 1;
@@ -240,9 +326,10 @@ export async function removeMember(
       if (recipient.publicKey !== null) {
         wrappedKeys.push({
           userId: recipient.userId,
-          wrappedKey: await toBase64Url(
-            await wrapEnvKey(newEnvKey, await fromBase64Url(recipient.publicKey)),
-          ),
+          wrappedKey: await wrapFor(newEnvKey, keys, recipient.publicKey, {
+            environmentId: environment.id,
+            keyVersion: newKeyVersion,
+          }),
         });
       }
     }
@@ -253,12 +340,13 @@ export async function removeMember(
     )) {
       tokenWrappedKeys.push({
         tokenId: token.id,
-        wrappedKey: await toBase64Url(
-          await wrapEnvKey(newEnvKey, await fromBase64Url(token.publicKey)),
-        ),
+        wrappedKey: await wrapFor(newEnvKey, keys, token.publicKey, {
+          environmentId: environment.id,
+          keyVersion: newKeyVersion,
+        }),
       });
     }
-    const latest = await pullEnvironment(keys, projectId, environment.id);
+    const latest = await pullEnvironment(keys, projectId, environment);
     const rotation: Rotation = {
       environmentId: environment.id,
       newKeyVersion,
@@ -327,17 +415,25 @@ export async function createServiceToken(
   const tokenId = toHex(crypto.getRandomValues(new Uint8Array(24)));
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(tokenId));
   const tokenKeys = await generateUserKeys();
-  const envKey = await getEnvKey(keys, environment.id, environment.currentKeyVersion);
+  const keyVersion = environment.currentKeyVersion;
+  const envKey = await getEnvKey(keys, projectId, environment, keyVersion);
   const body = {
     environmentId: environment.id,
     name,
     tokenIdHash: toHex(new Uint8Array(digest)),
     publicKey: await toBase64Url(tokenKeys.publicKey),
-    wrappedKey: await toBase64Url(await wrapEnvKey(envKey, tokenKeys.publicKey)),
+    wrappedKey: await wrapFor(envKey, keys, tokenKeys.publicKey, {
+      environmentId: environment.id,
+      keyVersion,
+    }),
     ...(expiresAt === undefined ? {} : { expiresAt: expiresAt.toISOString() }),
   };
   await clearKey(envKey);
-  await call((api) => api.v1.projects({ id: projectId }).tokens.post(body));
+  const created = await call((api) => api.v1.projects({ id: projectId }).tokens.post(body));
+  // Made here, so this is the one time its key is known to be right.
+  await pinConfirmedPublicKeys(keys.trust, projectId, [
+    tokenKeyOwner({ id: created.id, name, publicKey: body.publicKey }),
+  ]);
   const token = `envy_${tokenId}_${await toBase64Url(tokenKeys.privateKey)}`;
   await clearKey(tokenKeys.privateKey);
   return token;

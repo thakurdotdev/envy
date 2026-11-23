@@ -18,15 +18,18 @@ export function base64UrlByteLength(value: string): number | undefined {
   return bytes.length;
 }
 
-// Sizes from packages/crypto format version 1. The API cannot decrypt
-// anything, but it can refuse values that no client could have made.
+// Sizes from packages/crypto. The API cannot decrypt anything, but it can
+// refuse values that no current client could have made.
 export const BYTE_SIZES = {
   publicKey: 32,
   salt: 16,
   /** Format byte + 24-byte nonce + 32-byte key + 16-byte tag. */
   encryptedPrivateKey: 1 + 24 + 32 + 16,
-  /** Format byte + sealed box (32-byte one-time public key + 32-byte key + 16-byte tag). */
-  wrappedEnvKey: 1 + 32 + 32 + 16,
+  /**
+   * Format byte 2 + 24-byte nonce + 32-byte key + 16-byte tag. Format 1
+   * (anonymous sealed boxes) is still served but no longer accepted (ADR 0016).
+   */
+  wrappedEnvKey: 1 + 24 + 32 + 16,
   nonce: 24,
   /** Format byte + 16-byte tag, for an empty plaintext. */
   minimumCiphertext: 1 + 16,

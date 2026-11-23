@@ -3,12 +3,12 @@ import {
   encryptSecrets,
   fromBase64Url,
   toBase64Url,
-  unwrapEnvKey,
   type Secrets,
 } from "@envy/crypto";
+import { fetchEnvKey } from "./env-keys.ts";
 import type { EnvironmentSummary } from "./environment.ts";
 import type { ApiCaller } from "./session.ts";
-import { checkEnvironmentVersion } from "./trust.ts";
+import { checkNotRolledBack, rememberEnvironmentVersion } from "./trust.ts";
 import type { UnlockedKeys } from "./unlock.ts";
 
 // Every encrypt and decrypt for `envy` commands happens here, on this
@@ -24,18 +24,6 @@ export async function listEnvironments(
   return result.items;
 }
 
-async function getEnvKey(
-  session: ApiCaller,
-  keys: UnlockedKeys,
-  environmentId: string,
-  keyVersion: number,
-): Promise<Uint8Array> {
-  const result = await session.call((api) =>
-    api.v1.environments({ id: environmentId }).key.get({ query: { keyVersion } }),
-  );
-  return unwrapEnvKey(await fromBase64Url(result.wrappedKey), keys.privateKey);
-}
-
 /** The latest version of an environment, decrypted. An empty environment is version 0. */
 export async function pullEnvironment(
   session: ApiCaller,
@@ -46,14 +34,20 @@ export async function pullEnvironment(
   const { current } = await session.call((api) =>
     api.v1.environments({ id: environment.id }).secrets.get({ query: {} }),
   );
-  await checkEnvironmentVersion(environment, {
+  await checkNotRolledBack(environment, {
     version: current?.version ?? 0,
     keyVersion: environment.currentKeyVersion,
   });
   if (current === null) {
     return { version: 0, secrets: {} };
   }
-  const envKey = await getEnvKey(session, keys, environment.id, current.keyVersion);
+  const envKey = await fetchEnvKey({
+    session,
+    keys,
+    projectId,
+    environment,
+    keyVersion: current.keyVersion,
+  });
   const secrets = await decryptSecrets(
     {
       ciphertext: await fromBase64Url(current.ciphertext),
@@ -67,6 +61,10 @@ export async function pullEnvironment(
       keyVersion: current.keyVersion,
     },
   );
+  await rememberEnvironmentVersion(environment, {
+    version: current.version,
+    keyVersion: current.keyVersion,
+  });
   return { version: current.version, secrets };
 }
 
@@ -86,8 +84,9 @@ export async function pushEnvironment(input: {
   const { session, keys, projectId, environment } = input;
   const keyVersion = environment.currentKeyVersion;
   // A server must not get new secrets encrypted with an older (maybe leaked) key.
-  await checkEnvironmentVersion(environment, { version: input.baseVersion, keyVersion });
-  const envKey = await getEnvKey(session, keys, environment.id, keyVersion);
+  await checkNotRolledBack(environment, { version: input.baseVersion, keyVersion });
+  // Checks who made this key: a server that made its own would read the push.
+  const envKey = await fetchEnvKey({ session, keys, projectId, environment, keyVersion });
   const encrypted = await encryptSecrets(input.secrets, envKey, {
     projectId,
     environmentId: environment.id,
@@ -104,7 +103,7 @@ export async function pushEnvironment(input: {
   const created = await session.call((api) =>
     api.v1.environments({ id: environment.id }).secrets.post(body),
   );
-  await checkEnvironmentVersion(environment, { version: created.version, keyVersion });
+  await rememberEnvironmentVersion(environment, { version: created.version, keyVersion });
   return created.version;
 }
 

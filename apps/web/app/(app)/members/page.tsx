@@ -48,6 +48,7 @@ import {
 import { forgetCached, useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
 import { grantMember, removeMember, type Member } from "@/lib/envy";
+import { checkListedPublicKeys, memberKeyOwner } from "@/lib/trust";
 import { useUnlocked } from "@/lib/session";
 
 const ROLES = ["admin", "member", "viewer"] as const;
@@ -72,9 +73,14 @@ export default function MembersPage() {
 }
 
 function Members({ project }: { project: ProjectInfo }) {
-  const { profile } = useUnlocked();
+  const { profile, keys } = useUnlocked();
   const { state, reload } = useLoad(
-    () => call((api) => api.v1.projects({ id: project.id }).members.get()),
+    async () => {
+      const members = await call((api) => api.v1.projects({ id: project.id }).members.get());
+      // Refuses a key that changed since this browser last saw it.
+      await checkListedPublicKeys(keys.trust, project.id, members.items.flatMap(memberKeyOwner));
+      return members;
+    },
     [project.id],
     { cacheKey: `members:${project.id}` },
   );

@@ -38,8 +38,12 @@ Each key unlocks the one below it. Only the last one holds secret values.
    random bytes, shown once at signup as 55 base32 characters with a 2-byte
    checksum to catch typos.
 4. **Private key** → **environment key**. Each environment key version is 32
-   random bytes, wrapped for each member with a sealed box (`crypto_box_seal`)
-   to their public key.
+   random bytes, wrapped for each member (and service token) with a key that
+   only the sender and that recipient can compute (X25519 key exchange, then
+   XChaCha20-Poly1305). Opening it needs the sender's public key, so a key
+   proves which member made it; a server that only knows public keys cannot
+   make one (ADR 0016). Keys made before ADR 0016 used an anonymous sealed
+   box and are only accepted under the rules in "Trust on the client".
 5. **Environment key** → **secrets blob**. All variables of one environment as
    JSON, encrypted with XChaCha20-Poly1305 and a fresh random 24-byte nonce
    (a "number used once").
@@ -48,9 +52,12 @@ Each key unlocks the one below it. Only the last one holds secret values.
 
 All of this is in `packages/crypto` and tested there.
 
-- **Tampering is detected.** XChaCha20-Poly1305 and sealed boxes are
-  authenticated: any changed bit makes decryption fail with
-  `DECRYPTION_FAILED`.
+- **Tampering is detected.** XChaCha20-Poly1305 is authenticated: any
+  changed bit makes decryption fail with `DECRYPTION_FAILED`.
+- **Wrapped keys cannot be forged or moved.** A wrapped environment key
+  opens only with the sender's public key, the recipient's private key, and
+  the environment id and key version it was made for. A key made by anyone
+  else, or moved to another environment or key version, fails to open.
 - **Blobs cannot be moved.** A secrets blob is bound through additional
   authenticated data (AAD) to its project id, environment id, version and key
   version. A server that swaps blobs between environments, or relabels an old
@@ -77,15 +84,36 @@ All of this is in `packages/crypto` and tested there.
 | Database or backup leaked                  | Only ciphertext and wrapped keys     | Zero-knowledge design. Argon2id makes guessing master passwords slow                                               |
 | Server swaps, replays or changes blobs     | Decryption fails                     | Authenticated encryption, AAD binding, version checks                                                              |
 | Server sends weak Argon2id settings        | Client refuses                       | Minimum settings are enforced on the client                                                                        |
-| Server rolls an environment back           | CLI refuses                          | `trust.json` keeps the newest version and key version seen; older ones, or pushing with an older key, are refused  |
+| Server rolls an environment back           | CLI and web refuse                   | The newest version and key version seen are kept; older ones, or pushing with an older key, are refused            |
+| Server makes its own environment key       | CLI and web refuse                   | Wrapped keys prove their sender; the sender must be a trusted key (ADR 0016)                                       |
+| Server adds a fake member or token         | Needs the person's yes               | On a project already known, a key not seen before is only used after its fingerprint is confirmed (ADR 0016)       |
 | Server swaps a public key during an invite | The server could give itself access  | **Known v1 limit.** Fingerprints are shown on invite and in `envy members ls`; users must compare them out of band |
-| Server swaps a key it already showed       | CLI refuses                          | `trust.json` pins each member's and token's public key the first time the CLI sees it; a changed key is refused    |
+| Server swaps a key it already showed       | CLI and web refuse                   | Each member's and token's public key is pinned; a changed key is refused                                           |
 | Stolen laptop                              | Cached keys can be read              | OS keychain; `envy logout` and session revoke from the web                                                         |
 | Removed member kept copies                 | They know the old values             | New key version for every environment they could read, and a reminder to change the real credentials               |
 | Password, token or invite guessing         | Account abuse                        | Rate limits per IP and per user; long random tokens; tokens stored as hashes                                       |
-| Malicious `.envy.json` in a cloned repo    | Overwrite or upload other files      | `file` must stay inside the project folder; links pointing outside it are refused                                  |
+| Malicious `.envy.json` in a cloned repo    | Overwrite or upload other files      | `file` must stay inside the project folder; links (the file or any folder on its path) leading outside are refused |
 | Weak master password                       | Leaked data could be cracked offline | Argon2id slows this down but cannot stop it for very weak passwords; the UI should ask for a strong one            |
 | Lost master password and recovery key      | Data is gone for that user           | By design. An admin can grant access again with a new keypair                                                      |
+
+## Trust on the client
+
+The CLI (`trust.json`) and the web dashboard (browser storage, per account)
+follow the same rules, in `packages/shared/src/trust.ts`:
+
+- The first time a device works on a project, it trusts the public keys it
+  sees. After that, a key it has not seen is used (to wrap a key for, or as
+  the maker of a key) only once the person confirms its fingerprint.
+- A public key that changed is always refused.
+- The newest version and key version of each environment are remembered;
+  an older one is refused.
+- A key in the old format (no sender) is accepted only for a key version
+  already seen, or for an environment never seen.
+
+The web dashboard is only as trustworthy as the server that sends its
+JavaScript: whoever controls `WEB_URL` can change the page to read what is
+typed into it. The CLI does not have this weakness, so prefer it for the
+most sensitive work, and host the dashboard separately from the API.
 
 ## Team changes
 
@@ -120,6 +148,9 @@ All of this is in `packages/crypto` and tested there.
 - Rotating an environment's key re-wraps it for its active tokens, so a
   member's removal does not break CI, except for tokens that member made:
   those are revoked with them.
+- A token in CI usually starts with no `trust.json`, so it trusts the maker
+  of its key on first use (ADR 0016). A server that controls the API can
+  therefore still hand a fresh CI run a key and secrets of its own making.
 
 ## Out of scope for v1
 
@@ -128,3 +159,5 @@ All of this is in `packages/crypto` and tested there.
 - Hiding metadata (key names, member lists, timing) from the server.
 - Forward secrecy for old secret versions: a member who still has an old
   environment key can read old versions that were encrypted with it.
+- A removed member working with the server: their key stays trusted on
+  other devices, so they could make a key those devices accept (ADR 0016).

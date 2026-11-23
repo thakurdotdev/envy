@@ -10,6 +10,7 @@ import { recordAuditEvent } from "../audit/service.ts";
 import { applyRotation, type EnvironmentRotation } from "./rotation.ts";
 
 export type CreateEnvironmentInput = {
+  id: string;
   name: string;
   isProtected?: boolean | undefined;
   wrappedKeys: Array<{ userId: string; wrappedKey: string }>;
@@ -61,6 +62,7 @@ export function createEnvironmentService(dependencies: {
           await transaction.projects.lockForKeyChange(projectId);
           await assertKeysForEveryActiveMember(transaction, projectId, input.wrappedKeys);
           const created = await transaction.environments.create({
+            id: input.id,
             projectId,
             name: input.name,
             isShared: false,
@@ -143,7 +145,7 @@ export function createEnvironmentService(dependencies: {
           404,
         );
       }
-      return { keyVersion: version, wrappedKey };
+      return { keyVersion: version, wrappedKey: wrappedKey.wrappedKey, sender: wrappedKey.sender };
     },
   };
 }

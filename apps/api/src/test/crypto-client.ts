@@ -15,6 +15,7 @@ import {
   type Secrets,
   type UserKeys,
 } from "@envy/crypto";
+import { newUuidV7s } from "@envy/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { makeGitHubUser } from "./fake-github.ts";
 import { readField, type TestApp } from "./test-app.ts";
@@ -52,22 +53,48 @@ export async function signUpWithKeys(testApp: TestApp, login: string): Promise<T
   return { accessToken: session.accessToken, userId: session.userId, keys };
 }
 
-/** Makes four environment keys and wraps each for the owner, as a client does. */
-export async function makeStarterEnvironmentKeys(owner: TestUser): Promise<Record<string, string>> {
+/** Wraps an environment key from `sender` for `recipientPublicKey`, as a client does. */
+export async function wrapAsClient(
+  envKey: Uint8Array,
+  sender: TestUser,
+  recipientPublicKey: Uint8Array,
+  place: { environmentId: string; keyVersion: number },
+): Promise<string> {
+  return toBase64Url(
+    await wrapEnvKey(envKey, {
+      recipientPublicKey,
+      senderPrivateKey: sender.keys.privateKey,
+      place,
+    }),
+  );
+}
+
+/**
+ * The body that creates a project: four environment ids chosen here, and a
+ * new key for each, wrapped for the owner and bound to that id.
+ */
+export async function makeProjectBody(owner: TestUser, name: string) {
+  const names = ["shared", "development", "staging", "production"] as const;
+  const ids = newUuidV7s(names.length);
   const environmentKeys: Record<string, string> = {};
-  for (const environmentName of ["shared", "development", "staging", "production"]) {
-    const envKey = await generateEnvKey();
-    environmentKeys[environmentName] = await toBase64Url(
-      await wrapEnvKey(envKey, owner.keys.publicKey),
+  const environmentIds: Record<string, string> = {};
+  for (const [index, environmentName] of names.entries()) {
+    const environmentId = ids[index] ?? "";
+    environmentIds[environmentName] = environmentId;
+    environmentKeys[environmentName] = await wrapAsClient(
+      await generateEnvKey(),
+      owner,
+      owner.keys.publicKey,
+      { environmentId, keyVersion: 1 },
     );
   }
-  return environmentKeys;
+  return { name, environmentKeys, environmentIds };
 }
 
 export async function createProjectAsClient(testApp: TestApp, owner: TestUser, name: string) {
   const created = await testApp.request("POST", "/v1/projects", {
     accessToken: owner.accessToken,
-    body: { name, environmentKeys: await makeStarterEnvironmentKeys(owner) },
+    body: await makeProjectBody(owner, name),
   });
   const projectId = readField(created.body, "id");
   const listed = await testApp.request("GET", `/v1/projects/${projectId}/environments`, {
@@ -93,7 +120,12 @@ export async function fetchEnvKey(
     accessToken: user.accessToken,
   });
   const wrapped = await fromBase64Url(readField(response.body, "wrappedKey"));
-  return unwrapEnvKey(wrapped, user.keys.privateKey);
+  const sender = readObject(response.body, "sender");
+  return unwrapEnvKey(wrapped, {
+    recipientPrivateKey: user.keys.privateKey,
+    senderPublicKey: await fromBase64Url(readField(sender, "publicKey")),
+    place: { environmentId, keyVersion: readNumber(response.body, "keyVersion") },
+  });
 }
 
 export async function pushSecretsAsClient(
@@ -234,7 +266,10 @@ export async function grantAsClient(
     wrappedKeys.push({
       environmentId: environment.id,
       keyVersion: environment.currentKeyVersion,
-      wrappedKey: await toBase64Url(await wrapEnvKey(envKey, memberPublicKey)),
+      wrappedKey: await wrapAsClient(envKey, admin, memberPublicKey, {
+        environmentId: environment.id,
+        keyVersion: environment.currentKeyVersion,
+      }),
     });
   }
   return testApp.request("POST", `/v1/members/${member.id}/grant`, {
@@ -265,9 +300,10 @@ export async function removeAsClient(
     for (const member of remaining) {
       wrappedKeys.push({
         userId: member.userId,
-        wrappedKey: await toBase64Url(
-          await wrapEnvKey(newEnvKey, await fromBase64Url(member.publicKey)),
-        ),
+        wrappedKey: await wrapAsClient(newEnvKey, admin, await fromBase64Url(member.publicKey), {
+          environmentId: environment.id,
+          keyVersion: newKeyVersion,
+        }),
       });
     }
     const rotation: Record<string, unknown> = {
@@ -310,7 +346,11 @@ export async function createTokenAsClient(
 ) {
   const tokenId = randomBytes(24).toString("hex");
   const tokenKeys = await generateUserKeys();
-  const envKey = await fetchEnvKey(testApp, admin, place.environmentId);
+  const keyResponse = await testApp.request("GET", `/v1/environments/${place.environmentId}/key`, {
+    accessToken: admin.accessToken,
+  });
+  const keyVersion = readNumber(keyResponse.body, "keyVersion");
+  const envKey = await fetchEnvKey(testApp, admin, place.environmentId, keyVersion);
   const response = await testApp.request("POST", `/v1/projects/${place.projectId}/tokens`, {
     accessToken: admin.accessToken,
     body: {
@@ -318,7 +358,10 @@ export async function createTokenAsClient(
       name,
       tokenIdHash: createHash("sha256").update(tokenId).digest("hex"),
       publicKey: await toBase64Url(tokenKeys.publicKey),
-      wrappedKey: await toBase64Url(await wrapEnvKey(envKey, tokenKeys.publicKey)),
+      wrappedKey: await wrapAsClient(envKey, admin, tokenKeys.publicKey, {
+        environmentId: place.environmentId,
+        keyVersion,
+      }),
     },
   });
   return {

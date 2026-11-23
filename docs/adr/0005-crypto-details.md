@@ -20,7 +20,7 @@ but leaves some details open.
   columns), matching the data model.
 - **Blob layouts (format version 1):**
   - encrypted private key: `[1][24-byte nonce][ciphertext]`, AAD `envy/private-key/v1`
-  - wrapped env key: `[1][crypto_box_seal output]`
+  - wrapped env key: `[1][crypto_box_seal output]` (read only since ADR 0016, which adds format 2: `[2][24-byte nonce][ciphertext]`)
   - secrets: ciphertext column `[1][ciphertext]`, nonce column separate, AAD
     `envy/secrets/v1|projectId|environmentId|version|keyVersion`
 - **Recovery key:** 32 random bytes plus a 2-byte BLAKE2b checksum, printed as

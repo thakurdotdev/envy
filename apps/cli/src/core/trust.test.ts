@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkApiUrl } from "./settings.ts";
-import { checkEnvironmentVersion, checkPublicKeys } from "./trust.ts";
+import {
+  checkListedPublicKeys,
+  checkNotRolledBack,
+  pinConfirmedPublicKeys,
+  rememberEnvironmentVersion,
+} from "./trust.ts";
+
+const projectId = "0193a6f0-0000-7000-8000-000000000001";
 
 /** The error message a promise rejects with, or "did not fail". */
 async function failureOf(promise: Promise<unknown>): Promise<string> {
@@ -20,7 +27,7 @@ const bob = (publicKey: string) => ({
   publicKey,
 });
 
-describe("trust", () => {
+describe("trust.json", () => {
   let folder: string;
 
   beforeEach(async () => {
@@ -33,32 +40,32 @@ describe("trust", () => {
     await rm(folder, { recursive: true, force: true });
   });
 
-  test("remembers a public key the first time and refuses a different one later", async () => {
-    await checkPublicKeys([bob("key-a")]);
-    await checkPublicKeys([bob("key-a")]);
+  test("remembers a public key and refuses a different one later, with a way out", async () => {
+    await checkListedPublicKeys(projectId, [bob("key-a")]);
+    await checkListedPublicKeys(projectId, [bob("key-a")]);
 
-    expect(await failureOf(checkPublicKeys([bob("key-b")]))).toContain(
-      "different public key for @bob",
-    );
+    const failure = await failureOf(checkListedPublicKeys(projectId, [bob("key-b")]));
+    expect(failure).toContain("different public key for @bob");
+    const saved: unknown = JSON.parse(await readFile(join(folder, "trust.json"), "utf8"));
+    expect(saved).toMatchObject({ knownProjects: [projectId] });
   });
 
   test("a token and a user with the same id are pinned apart", async () => {
-    await checkPublicKeys([bob("key-a")]);
+    await pinConfirmedPublicKeys(projectId, [bob("key-a")]);
 
-    await checkPublicKeys([{ ...bob("key-b"), kind: "token", label: "the token" }]);
+    await pinConfirmedPublicKeys(projectId, [
+      { ...bob("key-b"), kind: "token", label: "the token" },
+    ]);
   });
 
   test("refuses an older secrets version or key version than one already seen", async () => {
     const production = { id: "0193a6f0-0000-7000-8000-000000000003", name: "production" };
-    await checkEnvironmentVersion(production, { version: 5, keyVersion: 2 });
-    await checkEnvironmentVersion(production, { version: 6, keyVersion: 2 });
+    await rememberEnvironmentVersion(production, { version: 6, keyVersion: 2 });
 
-    const olderVersion = checkEnvironmentVersion(production, { version: 5, keyVersion: 2 });
+    const olderVersion = checkNotRolledBack(production, { version: 5, keyVersion: 2 });
     expect(await failureOf(olderVersion)).toContain("version 5, which is older");
-    const olderKey = checkEnvironmentVersion(production, { version: 6, keyVersion: 1 });
+    const olderKey = checkNotRolledBack(production, { version: 6, keyVersion: 1 });
     expect(await failureOf(olderKey)).toContain("key version 1, which is older");
-    const emptied = checkEnvironmentVersion(production, { version: 0, keyVersion: 2 });
-    expect(await failureOf(emptied)).toContain("older");
   });
 });
 

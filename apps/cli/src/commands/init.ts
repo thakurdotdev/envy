@@ -1,4 +1,6 @@
-import { generateEnvKey, toBase64Url, wrapEnvKey, clearKey } from "@envy/crypto";
+import { clearKey, generateEnvKey } from "@envy/crypto";
+import { newUuidV7s } from "@envy/shared";
+import { wrapEnvKeyFor } from "../core/env-keys.ts";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { readEnvFile } from "../core/env-file.ts";
@@ -111,12 +113,20 @@ async function createProject(session: Session, keys: UnlockedKeys, name: string)
     staging: "",
     production: "",
   };
-  for (const environmentName of STARTER_ENVIRONMENTS) {
+  // Ids are chosen here so each key can be bound to its environment (ADR 0016).
+  const ids = newUuidV7s(STARTER_ENVIRONMENTS.length);
+  const environmentIds = { ...environmentKeys };
+  for (const [index, environmentName] of STARTER_ENVIRONMENTS.entries()) {
+    const environmentId = ids[index] ?? "";
+    environmentIds[environmentName] = environmentId;
     const envKey = await generateEnvKey();
-    environmentKeys[environmentName] = await toBase64Url(await wrapEnvKey(envKey, keys.publicKey));
+    environmentKeys[environmentName] = await wrapEnvKeyFor(envKey, keys, keys.publicKey, {
+      environmentId,
+      keyVersion: 1,
+    });
     await clearKey(envKey);
   }
-  return session.call((api) => api.v1.projects.post({ name, environmentKeys }));
+  return session.call((api) => api.v1.projects.post({ name, environmentKeys, environmentIds }));
 }
 
 type ImportCandidate = { file: string; environment: EnvironmentSummary };

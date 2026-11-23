@@ -51,7 +51,7 @@ export function SecretEditor({
 }) {
   const { keys } = useUnlocked();
   const { state, reload } = useLoad(
-    () => pullEnvironment(keys, projectId, environment.id),
+    () => pullEnvironment(keys, projectId, environment),
     [environment.id],
   );
   const [rows, setRows] = useState<Row[]>([]);

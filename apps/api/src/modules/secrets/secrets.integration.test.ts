@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { members } from "../../db/schema.ts";
 import {
   createProjectAsClient,
-  makeStarterEnvironmentKeys,
+  makeProjectBody,
   pullSecretsAsClient,
   pushSecretsAsClient,
   readItems,
@@ -51,7 +51,7 @@ describe("creating a project", () => {
   test("a second project with the same slug gets 409, and bad keys get 400", async () => {
     const duplicate = await testApp.request("POST", "/v1/projects", {
       accessToken: owner.accessToken,
-      body: { name: "my app", environmentKeys: await makeStarterEnvironmentKeys(owner) },
+      body: await makeProjectBody(owner, "my app"),
     });
     expect(duplicate.status).toBe(409);
     expect(readErrorCode(duplicate.body)).toBe("PROJECT_SLUG_TAKEN");
@@ -59,11 +59,27 @@ describe("creating a project", () => {
     const badKeys = await testApp.request("POST", "/v1/projects", {
       accessToken: owner.accessToken,
       body: {
-        name: "Other",
+        ...(await makeProjectBody(owner, "Other")),
         environmentKeys: { shared: "AQ", development: "AQ", staging: "AQ", production: "AQ" },
       },
     });
     expect(readErrorCode(badKeys.body)).toBe("VALIDATION_FAILED");
+
+    // An old client's anonymous sealed boxes (format 1, 81 bytes) are refused.
+    const sealedBox = "A".repeat(108);
+    const oldFormat = await testApp.request("POST", "/v1/projects", {
+      accessToken: owner.accessToken,
+      body: {
+        ...(await makeProjectBody(owner, "Old client")),
+        environmentKeys: {
+          shared: sealedBox,
+          development: sealedBox,
+          staging: sealedBox,
+          production: sealedBox,
+        },
+      },
+    });
+    expect(readErrorCode(oldFormat.body)).toBe("VALIDATION_FAILED");
   });
 });
 
@@ -208,7 +224,11 @@ describe("access", () => {
       [
         "POST",
         `${projectPath}/environments`,
-        { name: "evil", wrappedKeys: [{ userId: stranger.userId, wrappedKey: "AQ" }] },
+        {
+          id: Bun.randomUUIDv7(),
+          name: "evil",
+          wrappedKeys: [{ userId: stranger.userId, wrappedKey: "AQ" }],
+        },
       ],
       ["GET", `${projectPath}/audit`, undefined],
       ["GET", `/v1/environments/${environmentId}/key`, undefined],
@@ -273,8 +293,9 @@ describe("access", () => {
     const onlyOwner = await testApp.request("POST", path, {
       accessToken: owner.accessToken,
       body: {
+        id: Bun.randomUUIDv7(),
         name: "preview",
-        wrappedKeys: [{ userId: owner.userId, wrappedKey: "A".repeat(108) }],
+        wrappedKeys: [{ userId: owner.userId, wrappedKey: "A".repeat(98) }],
       },
     });
 

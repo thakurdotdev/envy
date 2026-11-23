@@ -5,13 +5,17 @@ import {
   fromBase64Url,
   generateEnvKey,
   toBase64Url,
-  unwrapEnvKey,
-  wrapEnvKey,
 } from "@envy/crypto";
+import { fetchEnvKey, wrapEnvKeyFor } from "./env-keys.ts";
 import { CliError } from "./errors.ts";
 import { listEnvironments, pullEnvironment } from "./secrets.ts";
 import type { Session } from "./session.ts";
-import { checkPublicKeys } from "./trust.ts";
+import {
+  checkListedPublicKeys,
+  pinConfirmedPublicKeys,
+  trustRecipients,
+  type KeyOwner,
+} from "./trust.ts";
 import type { UnlockedKeys } from "./unlock.ts";
 
 // Team changes that need cryptography on the admin's machine: giving a new
@@ -42,21 +46,22 @@ export type Member = {
 /** The project's members. Refuses if anyone's public key changed since this machine last saw it. */
 export async function listMembers(session: Session, projectId: string): Promise<Member[]> {
   const result = await session.call((api) => api.v1.projects({ id: projectId }).members.get());
-  await checkPublicKeys(
-    result.items.flatMap((member) =>
-      member.publicKey === null
-        ? []
-        : [
-            {
-              kind: "user" as const,
-              id: member.userId,
-              label: `@${member.githubLogin}`,
-              publicKey: member.publicKey,
-            },
-          ],
-    ),
-  );
+  await checkListedPublicKeys(projectId, result.items.flatMap(keyOwnerOf));
   return result.items;
+}
+
+/** A member as a key owner for the trust checks, or nothing if they have no key yet. */
+export function keyOwnerOf(member: Member): KeyOwner[] {
+  return member.publicKey === null
+    ? []
+    : [
+        {
+          kind: "user",
+          id: member.userId,
+          label: `@${member.githubLogin}`,
+          publicKey: member.publicKey,
+        },
+      ];
 }
 
 /** "@bob", "bob" or "bob@example.com" → the member. */
@@ -78,18 +83,6 @@ export async function fingerprintOf(publicKey: string | null): Promise<string> {
   return publicKey === null ? "(no key yet)" : fingerprint(await fromBase64Url(publicKey));
 }
 
-async function getOwnEnvKey(
-  session: Session,
-  keys: UnlockedKeys,
-  environmentId: string,
-  keyVersion: number,
-) {
-  const result = await session.call((api) =>
-    api.v1.environments({ id: environmentId }).key.get({ query: { keyVersion } }),
-  );
-  return unwrapEnvKey(await fromBase64Url(result.wrappedKey), keys.privateKey);
-}
-
 /** Wraps every environment key for a pending member and activates them. */
 export async function grantMember(
   session: Session,
@@ -102,14 +95,20 @@ export async function grantMember(
       hint: "Ask them to run envy login, then try again.",
     });
   }
+  // The caller checked the fingerprint with the member, so their key is pinned now.
+  await pinConfirmedPublicKeys(projectId, keyOwnerOf(member));
   const memberPublicKey = await fromBase64Url(member.publicKey);
   const wrappedKeys: WrappedKeyForEnvironment[] = [];
   for (const environment of await listEnvironments(session, projectId)) {
-    const envKey = await getOwnEnvKey(session, keys, environment.id, environment.currentKeyVersion);
+    const keyVersion = environment.currentKeyVersion;
+    const envKey = await fetchEnvKey({ session, keys, projectId, environment, keyVersion });
     wrappedKeys.push({
       environmentId: environment.id,
-      keyVersion: environment.currentKeyVersion,
-      wrappedKey: await toBase64Url(await wrapEnvKey(envKey, memberPublicKey)),
+      keyVersion,
+      wrappedKey: await wrapEnvKeyFor(envKey, keys, memberPublicKey, {
+        environmentId: environment.id,
+        keyVersion,
+      }),
     });
     await clearKey(envKey);
   }
@@ -134,6 +133,13 @@ export async function removeMember(
     (candidate) => candidate.id !== member.id && candidate.status === "active",
   );
   const activeTokens = await listActiveTokens(session, projectId);
+  // A hacked server could list a fake member or token; the new keys must
+  // only go to keys this device trusts.
+  await trustRecipients(
+    projectId,
+    [...staying.flatMap(keyOwnerOf), ...activeTokens.map(tokenKeyOwner)],
+    keys,
+  );
   const rotations: Rotation[] = [];
   for (const environment of await listEnvironments(session, projectId)) {
     const newKeyVersion = environment.currentKeyVersion + 1;
@@ -145,9 +151,10 @@ export async function removeMember(
       }
       wrappedKeys.push({
         userId: recipient.userId,
-        wrappedKey: await toBase64Url(
-          await wrapEnvKey(newEnvKey, await fromBase64Url(recipient.publicKey)),
-        ),
+        wrappedKey: await wrapEnvKeyFor(newEnvKey, keys, recipient.publicKey, {
+          environmentId: environment.id,
+          keyVersion: newKeyVersion,
+        }),
       });
     }
     // Service tokens for this environment get the new key too, so CI keeps working.
@@ -157,9 +164,10 @@ export async function removeMember(
     )) {
       tokenWrappedKeys.push({
         tokenId: token.id,
-        wrappedKey: await toBase64Url(
-          await wrapEnvKey(newEnvKey, await fromBase64Url(token.publicKey)),
-        ),
+        wrappedKey: await wrapEnvKeyFor(newEnvKey, keys, token.publicKey, {
+          environmentId: environment.id,
+          keyVersion: newKeyVersion,
+        }),
       });
     }
     const latest = await pullEnvironment(session, keys, projectId, environment);
@@ -200,13 +208,15 @@ export async function listActiveTokens(session: Session, projectId: string) {
       token.revokedAt === null &&
       (token.expiresAt === null || new Date(token.expiresAt).getTime() > now),
   );
-  await checkPublicKeys(
-    active.map((token) => ({
-      kind: "token" as const,
-      id: token.id,
-      label: `the service token "${token.name}"`,
-      publicKey: token.publicKey,
-    })),
-  );
+  await checkListedPublicKeys(projectId, active.map(tokenKeyOwner));
   return active;
+}
+
+export function tokenKeyOwner(token: { id: string; name: string; publicKey: string }): KeyOwner {
+  return {
+    kind: "token",
+    id: token.id,
+    label: `the service token "${token.name}"`,
+    publicKey: token.publicKey,
+  };
 }

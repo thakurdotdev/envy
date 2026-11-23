@@ -6,6 +6,8 @@ import { CryptoError } from "./errors.ts";
  * because readers pick the matching code path.
  */
 export const FORMAT_VERSION_1 = 1;
+/** Wrapped environment keys that prove who made them (ADR 0016). */
+export const FORMAT_VERSION_2 = 2;
 
 export function addFormatVersion(version: number, body: Uint8Array): Uint8Array {
   const blob = new Uint8Array(body.length + 1);
