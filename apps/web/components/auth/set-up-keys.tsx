@@ -134,7 +134,13 @@ function ChoosePassword({
   );
 }
 
-function SaveRecoveryKey({ recoveryKey, onDone }: { recoveryKey: string; onDone: () => void }) {
+export function SaveRecoveryKey({
+  recoveryKey,
+  onDone,
+}: {
+  recoveryKey: string;
+  onDone: () => void;
+}) {
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
 

@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type { Executor } from "../../db/executor.ts";
 import { users, type StoredKdfParams, type UserRow } from "../../db/schema.ts";
 
@@ -55,6 +55,31 @@ export function createUserRepository(database: Executor) {
         .update(users)
         .set(keys)
         .where(and(eq(users.id, userId), isNull(users.publicKey)))
+        .returning({ id: users.id });
+      return updated.length === 1;
+    },
+
+    /**
+     * Replaces the encrypted copies of an existing private key (new master
+     * password or new recovery key). The public key stays the same.
+     */
+    async replaceEncryptedPrivateKey(
+      userId: string,
+      keys: Omit<UserKeyMaterial, "publicKey" | "recoveryEncryptedPrivateKey"> & {
+        recoveryEncryptedPrivateKey?: string | undefined;
+      },
+    ): Promise<boolean> {
+      const updated = await database
+        .update(users)
+        .set({
+          encryptedPrivateKey: keys.encryptedPrivateKey,
+          kdfSalt: keys.kdfSalt,
+          kdfParams: keys.kdfParams,
+          ...(keys.recoveryEncryptedPrivateKey === undefined
+            ? {}
+            : { recoveryEncryptedPrivateKey: keys.recoveryEncryptedPrivateKey }),
+        })
+        .where(and(eq(users.id, userId), isNotNull(users.publicKey)))
         .returning({ id: users.id });
       return updated.length === 1;
     },

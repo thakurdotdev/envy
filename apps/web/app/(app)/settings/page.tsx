@@ -3,6 +3,7 @@
 import { Monitor, Terminal } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ChangePassword } from "@/components/change-password";
 import { PageHeader } from "@/components/page-header";
 import { LoadError, LoadingRows } from "@/components/states";
 import { StatusBadge } from "@/components/status-badge";
@@ -138,6 +139,7 @@ export default function DevicesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ChangePassword />
     </>
   );
 }

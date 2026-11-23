@@ -22,6 +22,7 @@ export const ERROR_CODES = [
   "OAUTH_STATE_MISMATCH",
   // Users
   "KEYS_ALREADY_SET",
+  "KEY_CHALLENGE_FAILED",
   // Projects, environments and secrets
   "FORBIDDEN",
   "PROJECT_NOT_FOUND",

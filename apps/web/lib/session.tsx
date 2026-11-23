@@ -20,7 +20,14 @@ import {
 } from "./api";
 import { clearLoadCache } from "@/hooks/use-load";
 import type { ConfirmNewKeys, KeyOwner } from "@envy/shared";
-import { setUpKeys, unlockKeys, type StoredKeys, type UnlockedKeys } from "./envy";
+import {
+  setUpKeys,
+  storeNewKeyCopies,
+  unlockKeys,
+  unlockWithRecoveryKey,
+  type StoredKeys,
+  type UnlockedKeys,
+} from "./envy";
 import { browserTrustStore, type KeyPair } from "./trust";
 
 export type Profile = {
@@ -51,6 +58,10 @@ type SessionActions = {
   keyConfirmation: KeyConfirmation | undefined;
   unlock: (password: string) => Promise<void>;
   setUp: (password: string) => Promise<string>;
+  /** Forgot the master password: the recovery key opens the keys; returns the new recovery key. */
+  recover: (recoveryKeyText: string, newPassword: string) => Promise<string>;
+  /** Checks the current master password, then stores the keys under the new one. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   finishSetUp: () => void;
   lock: () => void;
   signOut: () => Promise<void>;
@@ -180,6 +191,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const { keys, recoveryKeyText } = await setUpKeys(password);
         pendingKeysRef.current = { profile: state.profile, keys: withTrust(state.profile, keys) };
         return recoveryKeyText;
+      },
+      async recover(recoveryKeyText, newPassword) {
+        if (state.status !== "locked" || state.profile.keys === null) {
+          throw new Error("Recovery is only for a locked account with keys.");
+        }
+        const pair = await unlockWithRecoveryKey(recoveryKeyText, state.profile.keys);
+        // The typed-in recovery key is replaced too.
+        const { recoveryKeyText: newRecoveryKeyText, stored } = await storeNewKeyCopies(
+          pair.privateKey,
+          newPassword,
+          true,
+        );
+        const profile = { ...state.profile, keys: stored };
+        pendingKeysRef.current = { profile, keys: withTrust(profile, pair) };
+        return newRecoveryKeyText ?? "";
+      },
+      async changePassword(currentPassword, newPassword) {
+        if (state.status !== "unlocked" || state.profile.keys === null) {
+          throw new Error("Unlock first.");
+        }
+        // Throws a CryptoError when the current password is wrong.
+        const check = await unlockKeys(currentPassword, state.profile.keys);
+        await clearKey(check.privateKey);
+        const { stored } = await storeNewKeyCopies(state.keys.privateKey, newPassword, false);
+        setState({ ...state, profile: { ...state.profile, keys: stored } });
       },
       finishSetUp() {
         const pending = pendingKeysRef.current;

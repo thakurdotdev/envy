@@ -4,6 +4,7 @@
 
 Security fixes from a third audit (see `docs/security-review.md` and ADR 0016). **Update the CLI before the API is updated:** older CLIs cannot write the new key format.
 
+- New: `envy password` and the dashboard's settings page change your master password; `envy recover` and "Forgot it? Use your recovery key" on the unlock screen get you back in with the recovery key (ADR 0017). Before, the recovery key could not be used at all.
 - Environment keys now prove who made them. A hacked server can no longer make its own key and have the CLI or dashboard encrypt new secrets with it, or serve secrets of its own making.
 - On a project a device already knows, a teammate's or token's key it has not seen before is used only after you confirm its fingerprint (a prompt in the CLI, a dialog on the web).
 - The web dashboard now runs the same checks as the CLI: pinned keys, rolled-back versions and who made each key.

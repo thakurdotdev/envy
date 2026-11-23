@@ -40,3 +40,4 @@ export {
   type SecretsPlace,
 } from "./secrets.ts";
 export { fingerprint } from "./fingerprint.ts";
+export { answerKeyChallenge, CHALLENGE_BYTES, makeKeyChallenge } from "./key-challenge.ts";

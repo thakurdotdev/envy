@@ -96,7 +96,7 @@ export async function setUpNewKeys(session: Session): Promise<{ recoveryKeyText:
   return { recoveryKeyText: recovery.text };
 }
 
-async function cachePrivateKey(session: Session, privateKey: Uint8Array): Promise<void> {
+export async function cachePrivateKey(session: Session, privateKey: Uint8Array): Promise<void> {
   // Only the OS keychain may hold the unlocked key; the file keystore never does.
   if (getKeystore().kind === "keychain") {
     await session.saveCredentials({ privateKey: await toBase64Url(privateKey) });
@@ -111,21 +111,27 @@ async function readMasterPassword(message: string): Promise<string> {
   return askPassword(message, `Set ${MASTER_PASSWORD_VARIABLE}, or run this in a terminal.`);
 }
 
-async function chooseMasterPassword(): Promise<string> {
-  const fromEnvironment = process.env[MASTER_PASSWORD_VARIABLE];
+/**
+ * Asks for a new master password twice. `variable` is the environment
+ * variable that answers instead, for scripts and tests.
+ */
+export async function chooseMasterPassword(variable = MASTER_PASSWORD_VARIABLE): Promise<string> {
+  const fromEnvironment = process.env[variable];
   if (fromEnvironment) {
     assertStrongEnough(fromEnvironment);
     return fromEnvironment;
   }
+  const hint = `Set ${variable}, or run this in a terminal.`;
   for (;;) {
-    const password = await readMasterPassword(
+    const password = await askPassword(
       "Choose a master password (it never leaves this device)",
+      hint,
     );
     if (password.length < MINIMUM_PASSWORD_LENGTH) {
       output.warn(`Use at least ${MINIMUM_PASSWORD_LENGTH} characters.`);
       continue;
     }
-    const again = await readMasterPassword("Type it again");
+    const again = await askPassword("Type it again", hint);
     if (again === password) {
       return password;
     }
@@ -144,6 +150,6 @@ function assertStrongEnough(password: string): void {
 function wrongPassword(): CliError {
   return new CliError("The master password is not right.", {
     exitCode: EXIT_CODES.authError,
-    hint: "Try again, or use your recovery key.",
+    hint: "Try again. If you forgot it, run envy recover with your recovery key.",
   });
 }

@@ -57,7 +57,11 @@ export function createApp(dependencies: AppDependencies) {
     sessions: sessionRepository,
     users: userRepository,
   });
-  const users = createUserService({ users: userRepository });
+  const users = createUserService({
+    users: userRepository,
+    challengeSecret: config.jwtSecret,
+    clock,
+  });
 
   const repositories = createRepositories(database);
   const runInTransaction = createRunInTransaction(database);

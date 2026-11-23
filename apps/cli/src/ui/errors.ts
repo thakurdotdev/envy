@@ -29,6 +29,7 @@ const FIXES: Record<ErrorCode, { hint?: string; exitCode: ExitCode }> = {
   },
   OAUTH_STATE_MISMATCH: { exitCode: EXIT_CODES.authError, hint: "Start the sign-in again." },
   KEYS_ALREADY_SET: { exitCode: EXIT_CODES.userError, hint: "Run envy login to unlock instead." },
+  KEY_CHALLENGE_FAILED: { exitCode: EXIT_CODES.authError, hint: "Run the command again." },
   FORBIDDEN: { exitCode: EXIT_CODES.userError, hint: "Ask a project admin for a higher role." },
   PROJECT_NOT_FOUND: {
     exitCode: EXIT_CODES.userError,

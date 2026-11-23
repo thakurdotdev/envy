@@ -1,4 +1,5 @@
 import {
+  answerKeyChallenge,
   clearKey,
   decryptPrivateKey,
   decryptSecrets,
@@ -12,6 +13,7 @@ import {
   generateSalt,
   generateUserKeys,
   getPublicKey,
+  parseRecoveryKey,
   toBase64Url,
   wrapEnvKey,
   type KdfParams,
@@ -48,7 +50,9 @@ export type EnvironmentSummary = {
 };
 
 export type StoredKeys = {
+  publicKey: string;
   encryptedPrivateKey: string;
+  recoveryEncryptedPrivateKey: string;
   kdfSalt: string;
   kdfParams: KdfParams;
 };
@@ -96,6 +100,79 @@ export async function unlockKeys(password: string, stored: StoredKeys): Promise<
     return { privateKey, publicKey: await getPublicKey(privateKey) };
   } finally {
     await clearKey(masterKey);
+  }
+}
+
+/**
+ * Encrypts the private key again with a new master password (and, when
+ * asked, a new recovery key) and stores the copies. The keypair stays the
+ * same. The server first checks that this browser holds the private key.
+ * Returns the new recovery key text when one was made.
+ */
+export async function storeNewKeyCopies(
+  privateKey: Uint8Array,
+  newPassword: string,
+  newRecoveryKey: boolean,
+): Promise<{ recoveryKeyText: string | undefined; stored: StoredKeys }> {
+  const challenge = await call((api) => api.v1.me.keys.challenge.post());
+  const answer = await answerKeyChallenge(
+    await fromBase64Url(challenge.sealedChallenge),
+    privateKey,
+  );
+  const salt = await generateSalt();
+  const masterKey = await deriveMasterKey(newPassword, salt, DEFAULT_KDF_PARAMS);
+  const recovery = newRecoveryKey ? await generateRecoveryKey() : undefined;
+  try {
+    const body = {
+      challengeToken: challenge.challengeToken,
+      challengeAnswer: await toBase64Url(answer),
+      encryptedPrivateKey: await toBase64Url(await encryptPrivateKey(privateKey, masterKey)),
+      kdfSalt: await toBase64Url(salt),
+      kdfParams: DEFAULT_KDF_PARAMS,
+      ...(recovery === undefined
+        ? {}
+        : {
+            recoveryEncryptedPrivateKey: await toBase64Url(
+              await encryptPrivateKey(privateKey, recovery.key),
+            ),
+          }),
+    };
+    const profile = await call((api) => api.v1.me.keys.replace.post(body));
+    if (profile.keys === null) {
+      throw new ApiError("KEYS_NOT_SET", "This account has no keys yet.");
+    }
+    return { recoveryKeyText: recovery?.text, stored: profile.keys };
+  } finally {
+    await clearKey(masterKey);
+    if (recovery !== undefined) {
+      await clearKey(recovery.key);
+    }
+  }
+}
+
+/**
+ * Opens the server's recovery copy of the private key with the recovery key.
+ * Throws a CryptoError for a mistyped key (INVALID_RECOVERY_KEY) or one
+ * that does not open this account (DECRYPTION_FAILED).
+ */
+export async function unlockWithRecoveryKey(
+  recoveryKeyText: string,
+  stored: StoredKeys,
+): Promise<KeyPair> {
+  const recoveryKey = await parseRecoveryKey(recoveryKeyText);
+  try {
+    const privateKey = await decryptPrivateKey(
+      await fromBase64Url(stored.recoveryEncryptedPrivateKey),
+      recoveryKey,
+    );
+    const publicKey = await getPublicKey(privateKey);
+    // A server could send some other encrypted key; it must match the account's public key.
+    if ((await toBase64Url(publicKey)) !== stored.publicKey) {
+      throw new ApiError("KEYS_NOT_SET", "The server sent a key that is not this account's.");
+    }
+    return { privateKey, publicKey };
+  } finally {
+    await clearKey(recoveryKey);
   }
 }
 
