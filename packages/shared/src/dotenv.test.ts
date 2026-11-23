@@ -74,6 +74,16 @@ describe("serializeDotenv", () => {
     );
   });
 
+  test("escapes $ and backticks in double quotes, so `source .env` runs nothing", () => {
+    const variables = { MIXED: "it's $(touch pwned) and `id`" };
+    const text = serializeDotenv(variables);
+
+    expect(text).toBe('MIXED="it\'s \\$(touch pwned) and \\`id\\`"\n');
+    expect(parseDotenv(text)).toEqual(variables);
+    const shell = Bun.spawnSync(["sh", "-c", `${text}printf %s "$MIXED"`]);
+    expect(shell.stdout.toString()).toBe(variables.MIXED);
+  });
+
   test("refuses names that a .env file cannot hold", () => {
     expect(() => serializeDotenv({ "BAD NAME": "x" })).toThrow();
   });
