@@ -3,7 +3,7 @@
 // Supported: KEY=value lines, blank lines, # comments (whole line, or after a
 // space in an unquoted value), an optional `export ` prefix, and values in
 // "double", 'single' or `backtick` quotes, which may span several lines.
-// Double quotes understand \n, \r, \t, \" and \\. Single quotes and
+// Double quotes understand \n, \r, \t, \", \\, \$ and \`. Single quotes and
 // backticks keep the text exactly as written. There is no ${VAR} expansion.
 
 export type DotenvVariables = Record<string, string>;
@@ -132,6 +132,8 @@ const DOUBLE_QUOTE_ESCAPES: Record<string, string> = {
   t: "\t",
   '"': '"',
   "\\": "\\",
+  $: "$",
+  "`": "`",
 };
 
 function unescapeDoubleQuoted(text: string): string {
@@ -147,6 +149,8 @@ const PLAIN_VALUE_PATTERN = /^[A-Za-z0-9_\-./:@+,=%]*$/;
  * Writes variables as .env text, one per line, in the given order. Values are
  * quoted only when needed: single quotes when the value has no single quote or
  * line break (so no tool expands $ in it), double quotes with escapes otherwise.
+ * In double quotes, $ and ` are escaped too: a shell that runs `source .env`
+ * would otherwise run whatever command a pushed value holds.
  * `parseDotenv(serializeDotenv(variables))` always gives back the same variables.
  */
 export function serializeDotenv(variables: DotenvVariables): string {
@@ -171,6 +175,8 @@ function quoteValue(value: string): string {
   const escaped = value
     .replaceAll("\\", "\\\\")
     .replaceAll('"', '\\"')
+    .replaceAll("$", "\\$")
+    .replaceAll("`", "\\`")
     .replaceAll("\n", "\\n")
     .replaceAll("\r", "\\r");
   return `"${escaped}"`;
