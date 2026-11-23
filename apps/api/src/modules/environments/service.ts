@@ -56,10 +56,10 @@ export function createEnvironmentService(dependencies: {
           `wrappedKeys.${index}.wrappedKey`,
         );
       }
-      await assertKeysForEveryActiveMember(repositories, projectId, input.wrappedKeys);
-
       try {
         const environment = await runInTransaction(async (transaction) => {
+          await transaction.projects.lockForKeyChange(projectId);
+          await assertKeysForEveryActiveMember(transaction, projectId, input.wrappedKeys);
           const created = await transaction.environments.create({
             projectId,
             name: input.name,
@@ -106,6 +106,7 @@ export function createEnvironmentService(dependencies: {
     ) {
       const environment = await access.assertEnvironmentRole(context, environmentId, "admin");
       await runInTransaction(async (transaction) => {
+        await transaction.projects.lockForKeyChange(environment.projectId);
         const recipients = new Set(
           await transaction.members.listActiveUserIds(environment.projectId),
         );
