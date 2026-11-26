@@ -652,7 +652,7 @@ Open question: none.
 Goal: owners can delete projects, admins can limit a member to some environments, and the shared layer explains itself. One PR per feature.
 
 - [x] Delete and restore projects: owner only, restorable for 30 days, purged daily by the API; `envy projects ls|rm|restore`; dashboard project Settings (rename, delete) and Recently deleted
-- [ ] Shared layer, explained: "Shared (all)" tab, a line saying what it does, inherited values shown in each environment
+- [x] Shared layer, explained: "Shared (all)" tab, a line saying what it does, inherited values shown in each environment
 - [ ] Access per environment (ADR 0019): a member gets every stage or only some; keys only for those; server refuses the rest; CLI and dashboard to change it
 
 ## Testing, CI and release

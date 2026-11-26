@@ -18,7 +18,7 @@ export async function listProjectEnvironments(options: { json?: boolean }): Prom
   for (const environment of environments) {
     const tags = [
       environment.name === found.link.defaultEnvironment ? "default" : "",
-      environment.isShared ? "shared layer" : "",
+      environment.isShared ? "shared: every environment gets these" : "",
       environment.isProtected ? "protected" : "",
     ].filter((tag) => tag !== "");
     output.result(

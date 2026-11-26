@@ -18,6 +18,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLoad } from "@/hooks/use-load";
 import { useUnsavedChangesWarning } from "@/hooks/use-unsaved-changes";
+import { layersUnder } from "@envy/shared";
 import { listApps, listEnvironments, type AppSummary } from "@/lib/envy";
 
 // The root's own environments, in the app picker.
@@ -118,7 +119,7 @@ function Environments({ project }: { project: ProjectInfo }) {
               {environment.isProtected ? (
                 <Lock aria-label="protected" className="text-muted-foreground" />
               ) : null}
-              {environment.name}
+              {environment.isShared ? "Shared (all)" : environment.name}
               {dirty[environment.id] === true ? (
                 <span
                   className="size-1.5 rounded-full bg-brand"
@@ -148,6 +149,7 @@ function Environments({ project }: { project: ProjectInfo }) {
                 isActive={environment.id === current}
                 onSaved={() => bump(environment.id)}
                 onDirtyChange={(isDirty) => setDirtyFor(environment.id, isDirty)}
+                layers={layersUnder(environment, state.data.environments)}
               />
             </section>
             <section aria-labelledby={`history-${environment.id}`}>

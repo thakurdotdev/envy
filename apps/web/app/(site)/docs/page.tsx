@@ -126,7 +126,9 @@ export default function DocsPage() {
         <Section id="environments" title="Environments">
           <p>
             Each project starts with <Code>development</Code>, <Code>staging</Code> and{" "}
-            <Code>production</Code>. Values in <Code>shared</Code> go to all of them.
+            <Code>production</Code>. Values in <Code>shared</Code> go to all of them, so you set
+            them once; a value with the same name in an environment wins. The dashboard lists them
+            under each environment as inherited.
           </p>
           <Commands
             rows={[
