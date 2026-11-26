@@ -58,7 +58,14 @@ import {
 } from "@/components/ui/table";
 import { useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
-import { createServiceToken, listEnvironments, type EnvironmentSummary } from "@/lib/envy";
+import {
+  createServiceToken,
+  environmentDisplayName,
+  listApps,
+  listEnvironments,
+  type AppSummary,
+  type EnvironmentSummary,
+} from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
@@ -93,11 +100,20 @@ export default function TokensPage() {
 function Tokens({ project }: { project: ProjectInfo }) {
   const { state, reload } = useLoad(
     async () => {
-      const [tokens, environments] = await Promise.all([
+      const [tokens, environments, apps] = await Promise.all([
         call((api) => api.v1.projects({ id: project.id }).tokens.get()),
         listEnvironments(project.id),
+        listApps(project.id),
       ]);
-      return { tokens: tokens.items, environments };
+      // Tokens show "web/production" for an app's environment (ADR 0018).
+      const named = tokens.items.map((token) => ({
+        ...token,
+        environmentName: environmentDisplayName(
+          { appId: token.environmentAppId, name: token.environmentName },
+          apps,
+        ),
+      }));
+      return { tokens: named, environments, apps };
     },
     [project.id],
     { cacheKey: `tokens:${project.id}` },
@@ -110,7 +126,7 @@ function Tokens({ project }: { project: ProjectInfo }) {
   if (state.status === "error") {
     return <LoadError message={state.message} onRetry={reload} />;
   }
-  const { environments } = state.data;
+  const { environments, apps } = state.data;
   // Working tokens first; revoked and expired ones stay listed, greyed out, for the record.
   const now = Date.now();
   const tokens = state.data.tokens
@@ -125,7 +141,8 @@ function Tokens({ project }: { project: ProjectInfo }) {
           title="Service tokens"
           description={
             <>
-              Each token lets CI read one environment and nothing else. Set it as{" "}
+              Each token lets CI read one environment, with the layers under it (shared, and the
+              root stage for an app), and nothing else. Set it as{" "}
               <InlineCode>ENVY_TOKEN</InlineCode>.
             </>
           }
@@ -197,7 +214,12 @@ function Tokens({ project }: { project: ProjectInfo }) {
           </TableFrame>
         )}
       </section>
-      <CreateToken projectId={project.id} environments={environments} onCreated={reload} />
+      <CreateToken
+        projectId={project.id}
+        environments={environments}
+        apps={apps}
+        onCreated={reload}
+      />
       <RevokeDialog
         token={revoking}
         onClose={() => setRevoking(undefined)}
@@ -273,16 +295,20 @@ function RevokeDialog({
 function CreateToken({
   projectId,
   environments,
+  apps,
   onCreated,
 }: {
   projectId: string;
   environments: EnvironmentSummary[];
+  apps: AppSummary[];
   onCreated: () => void;
 }) {
   const { keys } = useUnlocked();
   // CI usually deploys production; the shared layer alone is rarely what a job needs.
   const preferred =
-    environments.find((environment) => environment.name === "production") ??
+    environments.find(
+      (environment) => environment.appId === null && environment.name === "production",
+    ) ??
     environments.find((environment) => !environment.isShared) ??
     environments[0];
   const [environmentId, setEnvironmentId] = useState(preferred?.id ?? "");
@@ -307,10 +333,11 @@ function CreateToken({
         keys,
         projectId,
         environment,
+        environments,
         name.trim(),
         days === undefined ? undefined : new Date(Date.now() + days * DAY_MS),
       );
-      setCreated({ token, environment: environment.name });
+      setCreated({ token, environment: environmentDisplayName(environment, apps) });
       onCreated();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -346,13 +373,13 @@ function CreateToken({
               <div className="space-y-2">
                 <Label htmlFor="token-environment">Environment</Label>
                 <Select value={environmentId} onValueChange={setEnvironmentId}>
-                  <SelectTrigger id="token-environment" className="w-40">
+                  <SelectTrigger id="token-environment" className="w-48">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {environments.map((environment) => (
                       <SelectItem key={environment.id} value={environment.id}>
-                        {environment.name}
+                        {environmentDisplayName(environment, apps)}
                       </SelectItem>
                     ))}
                   </SelectContent>

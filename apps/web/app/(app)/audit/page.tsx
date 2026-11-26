@@ -40,6 +40,11 @@ type AuditItem = {
   createdAt: string;
 };
 
+const REVOKE_REASONS: Record<string, string> = {
+  "creator removed": " (its maker was removed)",
+  "app removed": " (its app was removed)",
+};
+
 // Plain words for each action, and which details are worth showing.
 const ACTIONS: Record<string, { label: string; describe?: (metadata: Metadata) => string }> = {
   "project.created": { label: "Created the project" },
@@ -48,6 +53,14 @@ const ACTIONS: Record<string, { label: string; describe?: (metadata: Metadata) =
     describe: (m) => `to ${String(m["name"] ?? "")}`,
   },
   "project.deleted": { label: "Deleted the project" },
+  "app.created": {
+    label: "Added an app",
+    describe: (m) => String(m["name"] ?? ""),
+  },
+  "app.removed": {
+    label: "Removed an app",
+    describe: (m) => String(m["name"] ?? ""),
+  },
   "environment.created": {
     label: "Added an environment",
     describe: (m) => String(m["name"] ?? ""),
@@ -92,7 +105,7 @@ const ACTIONS: Record<string, { label: string; describe?: (metadata: Metadata) =
   "token.revoked": {
     label: "Revoked a service token",
     describe: (m) =>
-      `"${String(m["name"] ?? "")}"${m["reason"] === "creator removed" ? " (its maker was removed)" : ""}`,
+      `"${String(m["name"] ?? "")}"${REVOKE_REASONS[String(m["reason"] ?? "")] ?? ""}`,
   },
 };
 
