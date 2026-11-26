@@ -4,6 +4,7 @@
 
 - New: delete a project (owner only) with `envy projects rm` or the dashboard's new project **Settings** page, which also renames it. A deleted project can be restored for 30 days (`envy projects restore`, or **Recently deleted** on the projects page); after that the API removes it for good.
 - CLI: `envy projects ls [--deleted]`.
+- New: access per environment (ADR 0019). A member or viewer can be limited to some stages (for example development only): `envy members grant --access development`, `envy members access <member> <stages|all>`, or the dashboard's Members page. They only get those keys, the server refuses the rest, and taking a stage away rotates its key. Admins always have every environment. **Run `envy upgrade`:** older CLIs are refused when they make keys in a project with a limited member.
 - Dashboard: the shared tab is now "Shared (all)" and says what it does, and every environment lists the values it inherits (from shared, and from the root stage for an app), with the ones it overrides marked.
 
 ## 0.3.0 (2026-11-26)

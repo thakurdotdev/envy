@@ -178,6 +178,11 @@ export default function DocsPage() {
           <p className="text-muted-foreground">
             Roles: owner and admin manage people, member can change values, viewer can only read.
           </p>
+          <p>
+            To limit someone to some environments, for example a contractor who gets development
+            only: <Code>envy members grant sam --access development</Code>. Change it later with{" "}
+            <Code>envy members access sam development,staging</Code>. Shared is always included.
+          </p>
         </Section>
 
         <Section id="ci" title="Use it in CI">

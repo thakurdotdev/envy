@@ -95,6 +95,11 @@ const ACTIONS: Record<string, { label: string; describe?: (metadata: Metadata) =
     describe: (m) =>
       `@${String(m["githubLogin"] ?? "")}: ${String(m["from"] ?? "")} → ${String(m["to"] ?? "")}`,
   },
+  "member.access_changed": {
+    label: "Changed what someone can read",
+    describe: (m) =>
+      `@${String(m["githubLogin"] ?? "")}: ${String(m["from"] ?? "")} → ${String(m["to"] ?? "")}`,
+  },
   "member.removed": {
     label: "Removed a member",
     describe: (m) => `@${String(m["githubLogin"] ?? "")}`,
