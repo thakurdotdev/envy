@@ -13,6 +13,7 @@ const SECTIONS = [
   { id: "run", title: "Run your app" },
   { id: "values", title: "Change values" },
   { id: "environments", title: "Environments" },
+  { id: "monorepo", title: "Monorepos" },
   { id: "team", title: "Add your team" },
   { id: "ci", title: "Use it in CI" },
   { id: "help", title: "If something breaks" },
@@ -137,6 +138,26 @@ export default function DocsPage() {
           />
         </Section>
 
+        <Section id="monorepo" title="Monorepos">
+          <p>
+            Run <Code>envy init</Code> at the repo root. It finds your workspace folders and makes
+            each one an app with its own <Code>.env</Code> file.
+          </p>
+          <p>
+            An app gets three layers: <Code>shared</Code>, then the root stage (such as{" "}
+            <Code>development</Code>), then its own. Inside an app&apos;s folder, every command uses
+            that app.
+          </p>
+          <Commands
+            rows={[
+              ["envy pull", "at the root: write every app's .env"],
+              ["envy push", "at the root: save every changed app, all or nothing"],
+              ["envy run --app web -- npm run dev", "run one app from anywhere"],
+              ["envy apps add packages/worker", "make another folder an app"],
+            ]}
+          />
+        </Section>
+
         <Section id="team" title="Add your team">
           <CopyCommand command="envy members invite sam@example.com" />
           <p>
@@ -165,7 +186,7 @@ export default function DocsPage() {
           </p>
           <CodeBlock title=".github/workflows/test.yml" code={CI_EXAMPLE} />
           <p>
-            The token can only read that one environment. Remove it with{" "}
+            The token can only read that environment and the layers under it. Remove it with{" "}
             <Code>envy token revoke github-actions</Code>.
           </p>
         </Section>

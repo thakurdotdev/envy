@@ -76,6 +76,18 @@ envy history                   # versions; envy rollback <n> to restore one
 envy doctor                    # check that everything is set up
 ```
 
+### Monorepos
+
+Run `envy init` at the repo root: it finds your workspace folders and makes
+each one an app with its own `.env`. Values come in layers: `shared`, then
+the root stage (such as `development`), then the app's own.
+
+```sh
+envy pull                      # at the root: writes every app's .env
+cd apps/web && envy run -- npm run dev   # web's values, with the layers under it
+envy apps add packages/worker  # make another folder an app
+```
+
 Full list: [docs/commands](docs/commands/README.md). The web dashboard does
 everything except `run`.
 
@@ -110,8 +122,9 @@ jobs:
           ENVY_TOKEN: ${{ secrets.ENVY_TOKEN }}
 ```
 
-The token can only read the one environment it was made for. It cannot push,
-see other environments, or read the shared layer. Revoke it any time with
+The token can only read the environment it was made for and the layers under
+it (`shared`, and the root stage for an app). It cannot push or see other
+environments. Revoke it any time with
 `envy token revoke github-actions`.
 
 ## How it works

@@ -143,11 +143,16 @@ most sensitive work, and host the dashboard separately from the API.
   the API; the server stores a hash of it, the token's public key and the
   environment key wrapped for that public key. A database leak therefore
   exposes no usable token and no way to decrypt.
-- A token reads one environment and nothing else: no pushes, no other
-  environments, no shared layer, no project or member routes.
-- A leaked token gives read access to that one environment until it is
-  revoked or expires. Revoking takes effect on the next request.
-- Rotating an environment's key re-wraps it for its active tokens, so a
+- A token reads one environment and the layers under it (`shared`, and the
+  root stage for an app's environment, ADR 0018) and nothing else: no
+  pushes, no other environments or apps, no project or member routes. The
+  server accepts keys only for those exact layers when the token is made.
+  Tokens made before ADR 0018 read only their one environment.
+- A leaked token gives read access to those environments until it is
+  revoked or expires. Revoking takes effect on the next request; removing
+  an app revokes its tokens.
+- Rotating an environment's key re-wraps it for every active token that
+  reads it (as its own or as a layer), so a
   member's removal does not break CI, except for tokens that member made:
   those are revoked with them.
 - A token in CI usually starts with no `trust.json`, so it trusts the maker
