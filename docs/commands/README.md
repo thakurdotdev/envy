@@ -7,6 +7,7 @@
 | [pull-push.md](pull-push.md)                                 | `envy pull`, `envy push`                                     |
 | [run.md](run.md)                                             | `envy run`                                                   |
 | [variables.md](variables.md)                                 | `envy set`, `envy unset`, `envy get`, `envy use`             |
+| [apps.md](apps.md)                                           | `envy apps ls`, `envy apps add`, `envy apps rm`              |
 | [env.md](env.md)                                             | `envy env ls`, `envy env add`                                |
 | [history.md](history.md)                                     | `envy history`, `envy rollback`                              |
 | [members.md](members.md)                                     | `envy members …`, `envy accept`                              |

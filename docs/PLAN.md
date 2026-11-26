@@ -15,7 +15,7 @@
 | Phase 6 — Web dashboard                        | Done                                                  |
 | Phase 7 — CI tokens and polish                 | Done                                                  |
 | Phase 8 — Hardening and release                | Code done; deploy and first release pending           |
-| Phase 9 — Monorepo apps                        | In progress                                           |
+| Phase 9 — Monorepo apps                        | Done                                                  |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
 
@@ -620,14 +620,31 @@ Goal: one repo with many apps and packages, each with its own `.env`, managed fr
 - [x] ADR 0018: apps inside a project, three layers (shared → root stage → app stage), stages kept in sync
 - [x] API: `apps` table and module, app environments, app-aware environment list (`?apps=true`), new stages for every app at once
 - [x] API: all-or-nothing push to several environments; service tokens that read the layers under their environment
-- [ ] Shared: merge and separate any number of layers
-- [ ] CLI: `apps` in `.envy.json`, pick the app from the current folder, `--app`; pull, push, run, get, set, unset, history and rollback per app; root pull and push across every app
-- [ ] CLI: `envy apps ls|add|rm`, `envy env add` for every app, grants, removals and tokens that cover apps
-- [ ] CLI: `envy init` finds workspace folders and imports each one's files
-- [ ] Web: app picker on the project page, app environments in grants, removals and tokens, audit labels
-- [ ] End-to-end test against a sample monorepo; docs
+- [x] Shared: merge and separate any number of layers
+- [x] CLI: `apps` in `.envy.json`, pick the app from the current folder, `--app`; pull, push, run, get, set, unset, history and rollback per app; root pull and push across every app
+- [x] CLI: `envy apps ls|add|rm`, `envy env add` for every app, grants, removals and tokens that cover apps
+- [x] CLI: `envy init` finds workspace folders and imports each one's files
+- [x] Web: app picker on the project page, app environments in grants, removals and tokens, audit labels
+- [x] End-to-end test against a sample monorepo; docs
 
 Done when: in a monorepo with `apps/api` and `apps/web`, `envy init` at the root links both, `envy pull` at the root writes each app's file, `cd apps/web && envy run -- <cmd>` gets shared, root and web values, and a token for `web/production` gives CI the same values.
+
+#### Phase 9 summary (2026-11-26)
+
+Built:
+
+- API: `apps` module (list, create with one environment per root stage, soft remove that revokes the app's tokens); app environments are ordinary environments with `app_id`, so keys, rotation, grants and history are unchanged. New stages go to every app in the same request. `POST /v1/projects/:id/secrets` pushes several environments all or nothing. Service tokens can hold keys for the layers under their environment; rotations re-wrap for them.
+- Shared: `layersUnder`, `mergeLayers`, `separateFromLayers`, used by the API, CLI and web.
+- CLI: `apps` in `.envy.json` (paths checked like `file`), targets picked from the folder or `--app`, root `pull`/`push` across every app (`--all` from inside an app), `envy apps ls|add|rm`, `envy init` workspace detection (`package.json`, `pnpm-workspace.yaml`, folders with `.env` files), `envy env add` for every app, tokens with layers.
+- Web: app picker that keeps the stage, app names in tokens, token layers, removals that cover layer tokens, audit labels.
+- Tests: API integration (apps, stage sync, batch push, token layers, removal), CLI unit (targets, link parsing, workspaces, layers), a compiled-binary monorepo end-to-end test, and a browser test of the app picker.
+
+Not done:
+
+- Per-app access (a member who sees only one app): needs app-level membership.
+- Renaming an app: remove and add it again for now.
+
+Open question: none.
 
 ## Testing, CI and release
 

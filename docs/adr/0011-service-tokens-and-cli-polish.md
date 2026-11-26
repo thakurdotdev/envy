@@ -26,7 +26,8 @@ the CLI (`doctor`, `completion`, the menu, `--json`, `.env.example` checks).
   own), read its environment's wrapped key and secrets, and
   `GET /v1/tokens/current`. Everything else answers 403 `TOKEN_NOT_ALLOWED`,
   and other environments answer 404. Tokens do not read the shared layer,
-  because the plan limits a token to one environment.
+  because the plan limits a token to one environment. (Changed by ADR 0018:
+  new tokens also read the layers under their environment.)
 - **Actors are a union** (`user` or `token`). Code that needs a person calls
   `requireUser`, so the type checker finds every place a token must be
   refused.

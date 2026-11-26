@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+Monorepos (ADR 0018). **Run `envy upgrade`:** older CLIs cannot grant or remove members, or add environments, in a project that has apps.
+
+- New: apps. A project can have apps (`apps/api`, `apps/web`), each with its own `.env` file and its own environments, layered as `shared` → the root stage → the app's stage. `envy apps ls|add|rm`; `envy init` at a repo root finds workspace folders and offers to add them.
+- CLI: commands use the app of the current folder, or `--app <name>`. At the root, `envy pull` writes every app's file and `envy push` saves every changed app together, or none of them.
+- CLI and dashboard: new service tokens also read the layers under their environment, so CI gets the same values as `envy run` (the shared layer included).
+- Dashboard: an app picker on the project page; app environments in the token list and form; the audit log names app changes.
+- CLI: `envy env add` adds the stage to every app in the same step.
+- API: `POST /v1/projects/:id/secrets` pushes to several environments all or nothing; `GET /v1/projects/:id/environments?apps=true` lists app environments too.
+
 ## 0.2.0 (2026-11-23)
 
 Security fixes from a third audit (see `docs/security-review.md`, ADR 0016 and ADR 0017). **Run `envy upgrade`:** the server now only accepts environment keys in the new format, so older CLIs can no longer create projects or environments, grant, remove members or make tokens, and cannot read keys made in the new format.
