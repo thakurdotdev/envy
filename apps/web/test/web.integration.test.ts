@@ -295,6 +295,8 @@ describe("monorepo apps (ADR 0018)", () => {
     await writeFile(join(repo, "apps", "web", ".env"), "WEB_ONLY=from-the-app\n");
     const init = await runEnvy(["init", "--create", "Mono Web", "--yes"], repo, home);
     expect(init.stderr).toContain("Added the app web");
+    const shared = await runEnvy(["set", "ORG=acme", "--env", "shared"], repo, home);
+    expect(shared.exitCode).toBe(0);
 
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${webServer.port}/projects`);
@@ -309,6 +311,17 @@ describe("monorepo apps (ADR 0018)", () => {
     await page.getByText("Merged on top of shared and the root's development").waitFor();
     await page.getByRole("button", { name: "Show WEB_ONLY" }).click();
     await expectLocator(page.getByLabel("Value of WEB_ONLY")).toHaveValue("from-the-app");
+    // What the app gets from the layers under it is listed, read only.
+    const inherited = page.getByRole("region", { name: "Inherited variables" }).first();
+    await inherited.getByText("from shared", { exact: true }).waitFor();
+    await inherited.getByRole("button", { name: "Show inherited ORG" }).click();
+    await inherited.getByText("acme", { exact: true }).waitFor();
+
+    // The shared tab says what it is for.
+    await page.getByLabel("App").click();
+    await page.getByRole("option", { name: "Root (every app)" }).click();
+    await page.getByRole("tab", { name: "Shared (all)" }).click();
+    await page.getByText("Every environment gets these, in every app.").waitFor();
     await page.close();
   }, 120_000);
 });

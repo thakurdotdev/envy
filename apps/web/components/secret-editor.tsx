@@ -26,6 +26,7 @@ import { useUnlocked } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { EnvTable, type RowHandlers } from "./env-table";
 import { EnvToolbar, type EditorMode } from "./env-toolbar";
+import { InheritedVariables } from "./inherited-variables";
 import { RawEnvView } from "./raw-env-view";
 import { SaveDialog } from "./save-dialog";
 import { EmptyState, LoadError, LoadingRows } from "./states";
@@ -40,9 +41,12 @@ export function SecretEditor({
   isActive,
   onSaved,
   onDirtyChange,
+  layers = [],
 }: {
   projectId: string;
   environment: EnvironmentSummary;
+  /** The environments under this one, lowest first, shown read only below the table. */
+  layers?: EnvironmentSummary[];
   canEdit: boolean;
   /** Only the visible editor answers the save shortcut. */
   isActive: boolean;
@@ -292,6 +296,12 @@ export function SecretEditor({
           </AlertDescription>
         </Alert>
       )}
+      {environment.isShared ? (
+        <p className="text-sm text-muted-foreground">
+          Every environment gets these{environment.appId === null ? ", in every app" : ""}. A
+          variable set in an environment with the same name wins.
+        </p>
+      ) : null}
       <EnvToolbar
         mode={mode}
         onModeChange={changeMode}
@@ -379,6 +389,10 @@ export function SecretEditor({
           ) : null}
         </>
       )}
+
+      {mode === "table" ? (
+        <InheritedVariables projectId={projectId} layers={layers} ownKeys={Object.keys(edited)} />
+      ) : null}
 
       {canEdit && diff.removed.length > 0 ? (
         <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm">
