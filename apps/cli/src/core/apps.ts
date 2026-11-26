@@ -1,5 +1,5 @@
 import { clearKey, generateEnvKey } from "@envy/crypto";
-import { NAME_PATTERN, newUuidV7s, ROOT_APP_NAME } from "@envy/shared";
+import { memberCanRead, NAME_PATTERN, newUuidV7s, ROOT_APP_NAME } from "@envy/shared";
 import { join } from "node:path";
 import { wrapEnvKeyFor } from "./env-keys.ts";
 import type { EnvironmentSummary } from "./environment.ts";
@@ -75,7 +75,9 @@ export async function createApp(
   );
   const environments: Array<NewEnvironmentKey & { name: string }> = [];
   for (const stage of stages) {
-    environments.push({ name: stage.name, ...(await newEnvironmentKey(keys, members)) });
+    // Only members who can read this stage get its key (ADR 0019).
+    const readers = members.filter((member) => memberCanRead(member, stage));
+    environments.push({ name: stage.name, ...(await newEnvironmentKey(keys, readers)) });
   }
   return session.call((api) =>
     api.v1.projects({ id: projectId }).apps.post({ name, environments }),

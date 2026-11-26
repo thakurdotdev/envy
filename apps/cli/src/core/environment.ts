@@ -46,8 +46,8 @@ export function resolveEnvironment(input: {
   const environment = input.environments.find((candidate) => candidate.name === name);
   if (environment === undefined) {
     const known = input.environments.map((candidate) => candidate.name).join(", ");
-    throw new CliError(`This project has no environment called "${name ?? ""}".`, {
-      hint: `Pick one of: ${known}.`,
+    throw new CliError(`You have no environment called "${name ?? ""}" in this project.`, {
+      hint: `Pick one of: ${known}. If it exists, ask an admin for access.`,
     });
   }
   if (environment.isProtected && source !== "--env") {
