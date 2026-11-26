@@ -84,6 +84,12 @@ const FIXES: Record<ErrorCode, { hint?: string; exitCode: ExitCode }> = {
     hint: "Run envy members ls to see the team.",
   },
   OWNER_CANNOT_CHANGE: { exitCode: EXIT_CODES.userError },
+  APP_NOT_FOUND: { exitCode: EXIT_CODES.userError, hint: "Run envy apps ls to see the apps." },
+  APP_NAME_TAKEN: { exitCode: EXIT_CODES.userError, hint: "Pick a different app name." },
+  APP_ENVIRONMENTS_MISMATCH: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Try again; the project's apps or environments changed meanwhile.",
+  },
   ROTATION_MISMATCH: {
     exitCode: EXIT_CODES.userError,
     hint: "Try again; the project changed meanwhile.",

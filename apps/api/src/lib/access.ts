@@ -73,8 +73,11 @@ export function createAccessChecker(repositories: {
       }
       const actor = context.actor;
       if (actor.type === "token") {
-        // A token sees exactly one environment, and only to read it.
-        if (actor.environmentId !== environment.id) {
+        // A token sees its environment and the layers under it, and only to read them.
+        const readable =
+          actor.environmentId === environment.id ||
+          actor.layerEnvironmentIds.includes(environment.id);
+        if (!readable) {
           throw environmentNotFound();
         }
         if (minimumRole !== "viewer") {

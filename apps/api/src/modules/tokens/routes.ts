@@ -13,6 +13,19 @@ const CreateTokenBody = t.Object(
     tokenIdHash: t.String({ minLength: 64, maxLength: 64 }),
     publicKey: base64Url(100),
     wrappedKey: base64Url(200),
+    /**
+     * The keys of the layers under the environment (shared, and the root
+     * stage for an app), so the token reads what `envy run` would (ADR 0018).
+     */
+    layerWrappedKeys: t.Optional(
+      t.Array(
+        t.Object(
+          { environmentId: t.String({ format: "uuid" }), wrappedKey: base64Url(200) },
+          { additionalProperties: false },
+        ),
+        { maxItems: 2 },
+      ),
+    ),
     expiresAt: t.Optional(t.String({ format: "date-time" })),
   },
   { additionalProperties: false },

@@ -15,6 +15,8 @@ import { createUserRepository } from "./modules/users/repository.ts";
 import { userRoutes } from "./modules/users/routes.ts";
 import { createUserService } from "./modules/users/service.ts";
 import { createAccessChecker } from "./lib/access.ts";
+import { appRoutes } from "./modules/apps/routes.ts";
+import { createAppService } from "./modules/apps/service.ts";
 import { auditRoutes } from "./modules/audit/routes.ts";
 import { createAuditService } from "./modules/audit/service.ts";
 import { environmentRoutes } from "./modules/environments/routes.ts";
@@ -68,6 +70,7 @@ export function createApp(dependencies: AppDependencies) {
   const access = createAccessChecker(repositories);
   const projects = createProjectService({ repositories, runInTransaction, access, clock });
   const environments = createEnvironmentService({ repositories, runInTransaction, access, clock });
+  const apps = createAppService({ repositories, runInTransaction, access, clock });
   const secrets = createSecretService({ repositories, runInTransaction, access });
   const audit = createAuditService({ audit: repositories.audit, access });
   const members = createMemberService({
@@ -104,6 +107,7 @@ export function createApp(dependencies: AppDependencies) {
     .use(userRoutes({ authenticate, users, trustedProxies, writeLimiter }))
     .use(projectRoutes({ authenticate, projects, trustedProxies, writeLimiter }))
     .use(environmentRoutes({ authenticate, environments, trustedProxies, writeLimiter }))
+    .use(appRoutes({ authenticate, apps, trustedProxies, writeLimiter }))
     .use(secretRoutes({ authenticate, secrets, trustedProxies, writeLimiter }))
     .use(memberRoutes({ authenticate, members, trustedProxies, writeLimiter }))
     .use(tokenRoutes({ authenticate, tokens, trustedProxies, writeLimiter }))

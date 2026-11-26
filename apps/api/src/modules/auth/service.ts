@@ -32,6 +32,8 @@ export type TokenActor = {
   tokenId: string;
   projectId: string;
   environmentId: string;
+  /** The lower layers this token may read too (ADR 0018). */
+  layerEnvironmentIds: string[];
 };
 /** Who is making a request. */
 export type Actor = UserActor | TokenActor;

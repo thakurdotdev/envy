@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -142,6 +143,27 @@ export const invites = pgTable(
   ],
 );
 
+// An app is one part of a monorepo (apps/api, apps/web) with its own
+// environments. The folder lives only in the client's .envy.json (ADR 0018).
+export const apps = pgTable(
+  "apps",
+  {
+    id: id(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+    // A removed app's environments are no longer served.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("apps_project_name_unique")
+      .on(table.projectId, table.name)
+      .where(sql`${table.deletedAt} is null`),
+  ],
+);
+
 export const environments = pgTable(
   "environments",
   {
@@ -149,6 +171,8 @@ export const environments = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id),
+    // Null for the project's root environments.
+    appId: uuid("app_id").references(() => apps.id),
     name: text("name").notNull(),
     // The "shared" layer: merged under every other environment.
     isShared: boolean("is_shared").notNull().default(false),
@@ -157,7 +181,13 @@ export const environments = pgTable(
     currentKeyVersion: integer("current_key_version").notNull().default(1),
     createdAt: createdAt(),
   },
-  (table) => [uniqueIndex("environments_project_name_unique").on(table.projectId, table.name)],
+  (table) => [
+    // NULLS NOT DISTINCT: two root environments (app_id null) cannot share a name either.
+    unique("environments_project_app_name_unique")
+      .on(table.projectId, table.appId, table.name)
+      .nullsNotDistinct(),
+    index("environments_app_id_index").on(table.appId),
+  ],
 );
 
 export const recipientType = pgEnum("recipient_type", ["user", "token"]);
@@ -229,6 +259,12 @@ export const serviceTokens = pgTable(
     environmentId: uuid("environment_id")
       .notNull()
       .references(() => environments.id),
+    // The lower layers (shared, the root stage) this token may read too, so
+    // CI gets the same values as `envy run` (ADR 0018). Empty for old tokens.
+    layerEnvironmentIds: uuid("layer_environment_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     name: text("name").notNull(),
     tokenIdHash: text("token_id_hash").notNull().unique(),
     publicKey: text("public_key").notNull(),
@@ -275,6 +311,7 @@ export type SessionRow = typeof sessions.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type MemberRow = typeof members.$inferSelect;
 export type MemberRole = MemberRow["role"];
+export type AppRow = typeof apps.$inferSelect;
 export type EnvironmentRow = typeof environments.$inferSelect;
 export type SecretVersionRow = typeof secretVersions.$inferSelect;
 export type AuditLogRow = typeof auditLog.$inferSelect;
