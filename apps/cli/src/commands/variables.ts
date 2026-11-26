@@ -1,6 +1,8 @@
 import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
+import { loadEnvironmentVariables } from "../core/layered-pull.ts";
 import { CliError } from "../core/errors.ts";
-import { mergeLayers, pullEnvironment, pushEnvironment } from "../core/secrets.ts";
+import { pullEnvironment, pushEnvironment } from "../core/secrets.ts";
+import { environmentLabel } from "../core/targets.ts";
 import { setPulledVersion } from "../core/settings.ts";
 import { output } from "../ui/output.ts";
 import { askPassword } from "../ui/prompts.ts";
@@ -60,25 +62,21 @@ export async function unsetVariables(keys: string[], options: EnvironmentOptions
   );
 }
 
-/** Prints one value, the only command that shows a value. Includes the shared layer. */
+/** Prints one value, the only command that shows a value. Includes the layers under it. */
 export async function getVariable(
   key: string,
   options: EnvironmentOptions & { json?: boolean },
 ): Promise<void> {
   const context = await openProjectContext(options);
-  const { found, session, environment, sharedEnvironment } = context;
-  const keys = await context.unlock();
-  const pulled = await pullEnvironment(session, keys, found.link.projectId, environment);
-  const shared =
-    sharedEnvironment === undefined
-      ? { secrets: {} }
-      : await pullEnvironment(session, keys, found.link.projectId, sharedEnvironment);
-  const merged = mergeLayers(shared.secrets, pulled.secrets);
+  const merged = await loadEnvironmentVariables(context);
   const value = merged[key];
   if (value === undefined) {
-    throw new CliError(`${key} is not set in ${environment.name}.`, {
-      hint: `Set it with envy set ${key}=value.`,
-    });
+    throw new CliError(
+      `${key} is not set in ${environmentLabel(context.target, context.environment)}.`,
+      {
+        hint: `Set it with envy set ${key}=value.`,
+      },
+    );
   }
   output.result(options.json === true ? JSON.stringify({ [key]: value }) : value);
 }
@@ -88,6 +86,7 @@ async function changeEnvironment(
   change: (current: Record<string, string>) => Record<string, string>,
   describe: (environmentName: string, version: number) => string,
 ): Promise<void> {
+  // Only the top layer changes: in an app folder that is the app's own environment.
   const context = await openProjectContext(options);
   const { found, session, environment } = context;
   const keys = await context.unlock();
@@ -101,5 +100,5 @@ async function changeEnvironment(
     baseVersion: remote.version,
   });
   await setPulledVersion(environment.id, version);
-  output.success(describe(environment.name, version));
+  output.success(describe(environmentLabel(context.target, environment), version));
 }

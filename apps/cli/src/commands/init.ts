@@ -1,17 +1,20 @@
 import { clearKey, generateEnvKey } from "@envy/crypto";
 import { newUuidV7s } from "@envy/shared";
+import { addApp, appNameFromFolder } from "../core/apps.ts";
 import { wrapEnvKeyFor } from "../core/env-keys.ts";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
-import { readEnvFile } from "../core/env-file.ts";
-import type { EnvironmentSummary } from "../core/environment.ts";
 import { CliError } from "../core/errors.ts";
 import { updateGitignore } from "../core/gitignore.ts";
-import { findProjectLink, LINK_FILE_NAME, writeProjectLink } from "../core/project-link.ts";
-import { listEnvironments, pushEnvironment } from "../core/secrets.ts";
+import { importEnvFiles, type ImportedFile } from "../core/import-files.ts";
+import {
+  findProjectLink,
+  LINK_FILE_NAME,
+  writeProjectLink,
+  type FoundProjectLink,
+} from "../core/project-link.ts";
+import { listEnvironments } from "../core/secrets.ts";
 import { openSession, type Session } from "../core/session.ts";
-import { setPulledVersion } from "../core/settings.ts";
 import { getUnlockedKeys, type UnlockedKeys } from "../core/unlock.ts";
+import { findWorkspaceFolders } from "../core/workspaces.ts";
 import { output } from "../ui/output.ts";
 import { askMultiSelect, askSelect, askText, isInteractive } from "../ui/prompts.ts";
 
@@ -25,8 +28,6 @@ export type InitOptions = {
 const STARTER_ENVIRONMENTS = ["shared", "development", "staging", "production"] as const;
 const DEFAULT_ENVIRONMENT = "development";
 const CREATE_NEW = "__create_new__";
-// Files that describe variables instead of holding them, or that belong to one machine.
-const NOT_IMPORTED = new Set([".env.example", ".env.sample", ".env.template"]);
 
 export async function init(options: InitOptions): Promise<void> {
   const folder = process.cwd();
@@ -40,10 +41,19 @@ export async function init(options: InitOptions): Promise<void> {
   const session = await openSession();
   const keys = await getUnlockedKeys(session);
   const project = await chooseOrCreateProject(session, keys, options);
-  const environments = await listEnvironments(session, project.id);
+  const environments = (await listEnvironments(session, project.id)).filter(
+    (environment) => environment.appId === null,
+  );
 
-  const imported = await importEnvFiles(session, keys, project.id, environments, folder, options);
-  await writeProjectLink(folder, {
+  const imported = await importEnvFiles(
+    session,
+    keys,
+    project.id,
+    environments,
+    { folder, fileLabelPrefix: "", environmentLabelPrefix: "" },
+    options,
+  );
+  const link = {
     projectId: project.id,
     defaultEnvironment: environments.some((environment) => environment.name === DEFAULT_ENVIRONMENT)
       ? DEFAULT_ENVIRONMENT
@@ -51,19 +61,97 @@ export async function init(options: InitOptions): Promise<void> {
           ?.name ?? DEFAULT_ENVIRONMENT),
     file: ".env",
     branches: {},
-  });
+    apps: {},
+  };
+  await writeProjectLink(folder, link);
+  const appsImported = await addWorkspaceApps(
+    session,
+    keys,
+    {
+      folder,
+      path: `${folder}/${LINK_FILE_NAME}`,
+      link,
+    },
+    options,
+  );
   const gitignoreChanged = await updateGitignore(folder);
 
   if (gitignoreChanged) {
     output.info("Added .env files to .gitignore.");
   }
+  const allImported = [...imported, ...appsImported];
   const importSummary =
-    imported.length === 0
+    allImported.length === 0
       ? ""
-      : ` Imported ${imported.map((item) => `${item.count} from ${item.file} → ${item.environment}`).join(", ")}.`;
+      : ` Imported ${allImported.map((item) => `${item.count} from ${item.file} → ${item.environment}`).join(", ")}.`;
   output.success(
     `Linked to ${project.name}.${importSummary} Commit ${LINK_FILE_NAME}, then run: envy run -- <your command>`,
   );
+}
+
+/**
+ * In a monorepo, offers to add each workspace folder as an app (ADR 0018).
+ * Without a terminal, --yes adds the folders that already have .env files.
+ */
+async function addWorkspaceApps(
+  session: Session,
+  keys: UnlockedKeys,
+  found: FoundProjectLink,
+  options: InitOptions,
+): Promise<ImportedFile[]> {
+  const folders = await findWorkspaceFolders(found.folder);
+  if (folders.length === 0) {
+    return [];
+  }
+  let chosen: string[];
+  if (isInteractive() && options.yes !== true) {
+    chosen = await askMultiSelect(
+      "Which folders should be apps, each with its own .env?",
+      folders.map((folder) => ({
+        value: folder.path,
+        label: folder.path,
+        ...(folder.hasEnvFiles ? { hint: "has .env files" } : {}),
+      })),
+      "Add apps later with envy apps add <folder>.",
+      folders.filter((folder) => folder.hasEnvFiles).map((folder) => folder.path),
+    );
+  } else if (options.yes === true) {
+    chosen = folders.filter((folder) => folder.hasEnvFiles).map((folder) => folder.path);
+  } else {
+    output.info(
+      `Found ${folders.map((folder) => folder.path).join(", ")}. Add them with envy apps add <folder>.`,
+    );
+    return [];
+  }
+
+  const imported: ImportedFile[] = [];
+  let current = found;
+  for (const path of chosen) {
+    const name = uniqueAppName(path, Object.keys(current.link.apps));
+    const added = await addApp({
+      session,
+      keys,
+      found: current,
+      path,
+      name,
+      importOptions: { yes: options.yes === true },
+    });
+    // Saved after each app, so a failure later keeps the apps made so far.
+    await writeProjectLink(current.folder, added.link);
+    current = { ...current, link: added.link };
+    imported.push(...added.imported);
+    output.info(`Added the app ${name} (${path}).`);
+  }
+  return imported;
+}
+
+/** "apps/web" → "web", or "apps-web" when another folder already took "web". */
+function uniqueAppName(path: string, taken: string[]): string {
+  const short = appNameFromFolder(path);
+  if (short !== "" && short !== "root" && !taken.includes(short)) {
+    return short;
+  }
+  return appNameFromFolder(path.replaceAll("/", "-"));
 }
 
 async function chooseOrCreateProject(session: Session, keys: UnlockedKeys, options: InitOptions) {
@@ -127,91 +215,4 @@ async function createProject(session: Session, keys: UnlockedKeys, name: string)
     await clearKey(envKey);
   }
   return session.call((api) => api.v1.projects.post({ name, environmentKeys, environmentIds }));
-}
-
-type ImportCandidate = { file: string; environment: EnvironmentSummary };
-
-/** `.env` goes to development; `.env.<name>` goes to the environment with that name. */
-async function findImportCandidates(
-  folder: string,
-  environments: EnvironmentSummary[],
-): Promise<ImportCandidate[]> {
-  const files = (await readdir(folder)).filter(
-    (file) =>
-      /^\.env(\.[\w-]+)?$/.test(file) && !NOT_IMPORTED.has(file) && !file.endsWith(".local"),
-  );
-  const candidates: ImportCandidate[] = [];
-  for (const file of files.toSorted()) {
-    const environmentName = file === ".env" ? DEFAULT_ENVIRONMENT : file.slice(".env.".length);
-    const environment = environments.find((candidate) => candidate.name === environmentName);
-    if (environment === undefined) {
-      continue;
-    }
-    // .env.development is more specific than .env, so it wins.
-    const explicitFile = `.env.${environmentName}`;
-    if (file === ".env" && files.includes(explicitFile)) {
-      continue;
-    }
-    candidates.push({ file, environment });
-  }
-  return candidates;
-}
-
-async function importEnvFiles(
-  session: Session,
-  keys: UnlockedKeys,
-  projectId: string,
-  environments: EnvironmentSummary[],
-  folder: string,
-  options: InitOptions,
-) {
-  const candidates = await findImportCandidates(folder, environments);
-  if (candidates.length === 0) {
-    return [];
-  }
-  let chosen = candidates;
-  if (options.yes !== true) {
-    if (!isInteractive()) {
-      output.info(
-        `Found ${candidates.map((candidate) => candidate.file).join(", ")}. Add --yes to import them.`,
-      );
-      return [];
-    }
-    const picked = await askMultiSelect(
-      "Import these files?",
-      candidates.map((candidate) => ({
-        value: candidate.file,
-        label: `${candidate.file} → ${candidate.environment.name}`,
-      })),
-      "Add --yes to import them.",
-    );
-    chosen = candidates.filter((candidate) => picked.includes(candidate.file));
-  }
-
-  const imported: Array<{ file: string; environment: string; count: number }> = [];
-  for (const candidate of chosen) {
-    if (candidate.environment.latestVersion > 0) {
-      output.warn(
-        `${candidate.environment.name} already has secrets, so ${candidate.file} was not imported. Use envy push --env ${candidate.environment.name}.`,
-      );
-      continue;
-    }
-    const secrets = (await readEnvFile(join(folder, candidate.file))) ?? {};
-    const version = await pushEnvironment({
-      session,
-      keys,
-      projectId,
-      environment: candidate.environment,
-      secrets,
-      baseVersion: 0,
-      message: `Imported from ${candidate.file}`,
-    });
-    await setPulledVersion(candidate.environment.id, version);
-    imported.push({
-      file: candidate.file,
-      environment: candidate.environment.name,
-      count: Object.keys(secrets).length,
-    });
-  }
-  return imported;
 }

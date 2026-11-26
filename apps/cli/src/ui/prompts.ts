@@ -69,6 +69,8 @@ export async function askMultiSelect(
   message: string,
   choices: Choice[],
   nonInteractiveHint: string,
+  /** The choices ticked at the start (all of them if left out). */
+  initialValues: string[] = choices.map((choice) => choice.value),
 ): Promise<string[]> {
   if (!isInteractive()) {
     throw needsInput(nonInteractiveHint);
@@ -76,7 +78,7 @@ export async function askMultiSelect(
   const answer = await clack.multiselect<string>({
     message,
     options: choices,
-    initialValues: choices.map((choice) => choice.value),
+    initialValues,
     required: false,
   });
   return stopIfCancelled<string[]>(answer);

@@ -4,20 +4,25 @@ import { basename, dirname, join, relative } from "node:path";
 import { writeFileSafely } from "./settings.ts";
 import { CliError } from "./errors.ts";
 import { isInsideFolder, type FoundProjectLink } from "./project-link.ts";
+import { rootTarget, targetFileLabel, type Target } from "./targets.ts";
 
 /**
- * The full path of the file `envy pull` writes and `envy push` reads.
- * Refuses a path that leads outside the project folder through a symbolic
- * link, either the file itself or one of its folders: a cloned repo could
- * ship one to make envy read or replace some other file.
+ * The full path of the file `envy pull` writes and `envy push` reads, for
+ * the root or one app. Refuses a path that leads outside the repo through a
+ * symbolic link, either the file itself or one of its folders: a cloned
+ * repo could ship one to make envy read or replace some other file.
  */
-export async function projectEnvFilePath(found: FoundProjectLink): Promise<string> {
-  const path = join(found.folder, found.link.file);
+export async function projectEnvFilePath(
+  found: FoundProjectLink,
+  target: Target = rootTarget(found),
+): Promise<string> {
+  const label = targetFileLabel(target);
+  const path = join(target.folder, target.file);
   const folder = await realpath(found.folder);
-  const target = await realpathOfNearestExisting(path);
-  if (!isInsideFolder(relative(folder, target)) || target === folder) {
-    throw new CliError(`${found.link.file} leads to a file outside this project.`, {
-      hint: `Make ${found.link.file} and its folders regular files and folders, not links, then try again.`,
+  const targetPath = await realpathOfNearestExisting(path);
+  if (!isInsideFolder(relative(folder, targetPath)) || targetPath === folder) {
+    throw new CliError(`${label} leads to a file outside this project.`, {
+      hint: `Make ${label} and its folders regular files and folders, not links, then try again.`,
     });
   }
   return path;

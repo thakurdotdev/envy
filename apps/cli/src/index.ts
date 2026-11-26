@@ -23,6 +23,7 @@ import {
 } from "./commands/members.ts";
 import { completion } from "./commands/completion.ts";
 import { doctor } from "./commands/doctor.ts";
+import { addAppCommand, listProjectApps, removeAppCommand } from "./commands/apps.ts";
 import { addEnvironment, listProjectEnvironments } from "./commands/environments.ts";
 import { menu } from "./commands/menu.ts";
 import { createToken, listTokens, revokeToken } from "./commands/token.ts";
@@ -41,6 +42,11 @@ const environmentOption = [
   "-e, --env <name>",
   "environment to use (default: from .envy.json)",
 ] as const;
+const appOption = [
+  "-a, --app <name>",
+  "app of a monorepo to use, or root (default: the app of the current folder)",
+] as const;
+const allOption = ["--all", "the root and every app, even inside an app folder"] as const;
 const yesOption = ["-y, --yes", "answer yes to confirmations (for scripts and CI)"] as const;
 const jsonOption = ["--json", "print machine-readable JSON"] as const;
 
@@ -73,15 +79,21 @@ program
 
 program
   .command("pull")
-  .description("write the environment's variables to the local .env file")
+  .description(
+    "write the environment's variables to the local .env file (at a monorepo root, every app's)",
+  )
   .option(...environmentOption)
+  .option(...appOption)
+  .option(...allOption)
   .option(...yesOption)
   .action(pull);
 
 program
   .command("push")
-  .description("upload the local .env file as a new version")
+  .description("upload the local .env file as a new version (at a monorepo root, every app's)")
   .option(...environmentOption)
+  .option(...appOption)
+  .option(...allOption)
   .option(...yesOption)
   .option("-m, --message <text>", "note to show in envy history")
   .option("--force", "replace a version someone pushed after your last pull")
@@ -92,6 +104,7 @@ program
   .description("run a command with the variables injected (nothing is written to disk)")
   .argument("<command...>", "the command, after --")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .passThroughOptions()
   .action(run);
@@ -101,6 +114,7 @@ program
   .description("set variables: envy set KEY=value, or envy set KEY to type the value hidden")
   .argument("<assignments...>")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .action(setVariables);
 
@@ -109,6 +123,7 @@ program
   .description("remove variables")
   .argument("<keys...>")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .action(unsetVariables);
 
@@ -117,6 +132,7 @@ program
   .description("print one value")
   .argument("<key>")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .option(...jsonOption)
   .action(getVariable);
@@ -131,6 +147,7 @@ program
   .command("history")
   .description("list the versions of an environment")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .option("-n, --limit <count>", "how many versions to show", "20")
   .option(...jsonOption)
@@ -141,6 +158,7 @@ program
   .description("make an old version the current one (saved as a new version)")
   .argument("<version>")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .action(rollback);
 
@@ -181,6 +199,28 @@ program
   .argument("<link>")
   .action(acceptInvite);
 
+const apps = program.command("apps").description("apps of a monorepo, each with its own .env");
+apps
+  .command("ls")
+  .description("list the apps and their folders")
+  .option(...jsonOption)
+  .action(listProjectApps);
+apps
+  .command("add")
+  .description("make a folder an app, with an environment for each stage")
+  .argument("<folder>")
+  .option("--name <name>", "the app's name (default: the folder's name)")
+  .option("--file <file>", "the file envy pull writes in the folder", ".env")
+  .option("--no-inherit-root", "do not merge the root environment under the app's")
+  .option(...yesOption)
+  .action(addAppCommand);
+apps
+  .command("rm")
+  .description("remove an app for everyone (its tokens stop working)")
+  .argument("<name>")
+  .option(...yesOption)
+  .action(removeAppCommand);
+
 const environments = program.command("env").description("list and add environments");
 environments
   .command("ls")
@@ -189,7 +229,7 @@ environments
   .action(listProjectEnvironments);
 environments
   .command("add")
-  .description("add an environment (keys are wrapped for every member)")
+  .description("add an environment to the root and every app (keys are wrapped for every member)")
   .argument("<name>")
   .option("--protected", "needs --env and a confirmation every time, like production")
   .action(addEnvironment);
@@ -199,6 +239,7 @@ tokens
   .command("create")
   .description("make a token that can read one environment (shown once)")
   .option(...environmentOption)
+  .option(...appOption)
   .option(...yesOption)
   .option("--name <name>", "a name to recognise it by, such as github-actions")
   .option("--expires <days>", "stop working after this long, for example 90d")

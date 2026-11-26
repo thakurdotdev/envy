@@ -157,10 +157,13 @@ export async function removeMember(
         }),
       });
     }
-    // Service tokens for this environment get the new key too, so CI keeps working.
+    // Service tokens that read this environment (as theirs or as a layer
+    // under it, ADR 0018) get the new key too, so CI keeps working.
     const tokenWrappedKeys: Rotation["tokenWrappedKeys"] = [];
     for (const token of activeTokens.filter(
-      (candidate) => candidate.environmentId === environment.id,
+      (candidate) =>
+        candidate.environmentId === environment.id ||
+        candidate.layerEnvironmentIds.includes(environment.id),
     )) {
       tokenWrappedKeys.push({
         tokenId: token.id,

@@ -4,6 +4,7 @@ import { resolveEnvironment, type EnvironmentSummary } from "./environment.ts";
 function environment(name: string, isProtected = false): EnvironmentSummary {
   return {
     id: name,
+    appId: null,
     name,
     isShared: name === "shared",
     isProtected,

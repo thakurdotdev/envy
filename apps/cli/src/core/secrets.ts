@@ -20,7 +20,17 @@ export async function listEnvironments(
   session: ApiCaller,
   projectId: string,
 ): Promise<EnvironmentSummary[]> {
-  const result = await session.call((api) => api.v1.projects({ id: projectId }).environments.get());
+  // App environments too (ADR 0018); the caller picks the ones it needs.
+  const result = await session.call((api) =>
+    api.v1.projects({ id: projectId }).environments.get({ query: { apps: "true" } }),
+  );
+  return result.items;
+}
+
+export type AppSummary = { id: string; name: string };
+
+export async function listApps(session: ApiCaller, projectId: string): Promise<AppSummary[]> {
+  const result = await session.call((api) => api.v1.projects({ id: projectId }).apps.get());
   return result.items;
 }
 
@@ -68,11 +78,7 @@ export async function pullEnvironment(
   return { version: current.version, secrets };
 }
 
-/**
- * Encrypts and uploads a new version. Throws a CliError with apiCode
- * VERSION_CONFLICT when someone else pushed after `baseVersion`.
- */
-export async function pushEnvironment(input: {
+type PushInput = {
   session: ApiCaller;
   keys: UnlockedKeys;
   projectId: string;
@@ -80,7 +86,57 @@ export async function pushEnvironment(input: {
   secrets: Secrets;
   baseVersion: number;
   message?: string;
-}): Promise<number> {
+};
+
+/**
+ * Encrypts and uploads a new version. Throws a CliError with apiCode
+ * VERSION_CONFLICT when someone else pushed after `baseVersion`.
+ */
+export async function pushEnvironment(input: PushInput): Promise<number> {
+  const body = await encryptPush(input);
+  const created = await input.session.call((api) =>
+    api.v1.environments({ id: input.environment.id }).secrets.post(body),
+  );
+  await rememberEnvironmentVersion(input.environment, {
+    version: created.version,
+    keyVersion: body.keyVersion,
+  });
+  return created.version;
+}
+
+/**
+ * Pushes to several environments of the project together (ADR 0018): all
+ * are saved, or none is. Returns the new version of each environment.
+ */
+export async function pushEnvironments(
+  pushes: Array<Omit<PushInput, "session" | "keys" | "projectId">>,
+  shared: Pick<PushInput, "session" | "keys" | "projectId">,
+): Promise<Map<string, number>> {
+  const bodies: Array<{ environmentId: string } & Awaited<ReturnType<typeof encryptPush>>> = [];
+  for (const push of pushes) {
+    bodies.push({
+      environmentId: push.environment.id,
+      ...(await encryptPush({ ...shared, ...push })),
+    });
+  }
+  const created = await shared.session.call((api) =>
+    api.v1.projects({ id: shared.projectId }).secrets.post({ pushes: bodies }),
+  );
+  const versions = new Map<string, number>();
+  for (const item of created.items) {
+    versions.set(item.environmentId, item.version);
+    const push = pushes.find((candidate) => candidate.environment.id === item.environmentId);
+    if (push !== undefined) {
+      await rememberEnvironmentVersion(push.environment, {
+        version: item.version,
+        keyVersion: item.keyVersion,
+      });
+    }
+  }
+  return versions;
+}
+
+async function encryptPush(input: PushInput) {
   const { session, keys, projectId, environment } = input;
   const keyVersion = environment.currentKeyVersion;
   // A server must not get new secrets encrypted with an older (maybe leaked) key.
@@ -93,44 +149,11 @@ export async function pushEnvironment(input: {
     version: input.baseVersion + 1,
     keyVersion,
   });
-  const body = {
+  return {
     baseVersion: input.baseVersion,
     keyVersion,
     ciphertext: await toBase64Url(encrypted.ciphertext),
     nonce: await toBase64Url(encrypted.nonce),
     ...(input.message === undefined ? {} : { message: input.message }),
   };
-  const created = await session.call((api) =>
-    api.v1.environments({ id: environment.id }).secrets.post(body),
-  );
-  await rememberEnvironmentVersion(environment, { version: created.version, keyVersion });
-  return created.version;
-}
-
-/** The shared layer first, then the environment on top. */
-export function mergeLayers(shared: Secrets, environment: Secrets): Secrets {
-  return { ...shared, ...environment };
-}
-
-/**
- * What to push to an environment from a file that `envy pull` wrote with the
- * shared layer merged in: keys that came from the shared layer unchanged are
- * left out, so they are not copied into the environment.
- */
-export function separateFromShared(input: {
-  local: Secrets;
-  shared: Secrets;
-  remoteEnvironment: Secrets;
-}): Secrets {
-  const result: Secrets = {};
-  for (const [key, value] of Object.entries(input.local)) {
-    const cameFromShared =
-      Object.hasOwn(input.shared, key) &&
-      input.shared[key] === value &&
-      !Object.hasOwn(input.remoteEnvironment, key);
-    if (!cameFromShared) {
-      result[key] = value;
-    }
-  }
-  return result;
 }

@@ -8,7 +8,10 @@ import { output } from "../ui/output.ts";
 export async function useEnvironment(name: string): Promise<void> {
   const found = await requireProjectLink();
   const session = await openSession();
-  const environments = await listEnvironments(session, found.link.projectId);
+  // Stages are root environments; every app has the same ones.
+  const environments = (await listEnvironments(session, found.link.projectId)).filter(
+    (environment) => environment.appId === null,
+  );
   const environment = environments.find((candidate) => candidate.name === name);
   if (environment === undefined) {
     throw new CliError(`This project has no environment called "${name}".`, {

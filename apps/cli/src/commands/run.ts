@@ -1,11 +1,9 @@
-import {
-  loadEnvironmentVariables,
-  openProjectContext,
-  type EnvironmentOptions,
-} from "../core/context.ts";
+import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
+import { loadEnvironmentVariables } from "../core/layered-pull.ts";
 import { CliError } from "../core/errors.ts";
 import { withSpinner } from "../ui/prompts.ts";
 import { warnAboutMissingKeys } from "../core/example-check.ts";
+import { environmentLabel } from "../core/targets.ts";
 
 const FORWARDED_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 const SIGNAL_NUMBERS: Record<string, number> = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15, SIGKILL: 9 };
@@ -19,13 +17,13 @@ export async function run(command: string[], options: EnvironmentOptions): Promi
     throw new CliError("Say which command to run.", { hint: "For example: envy run -- npm start" });
   }
   const context = await openProjectContext(options);
-  const { found, environment } = context;
+  const { target, environment } = context;
   await context.unlock();
   const variables = await withSpinner(`Loading ${environment.name}`, () =>
     loadEnvironmentVariables(context),
   );
 
-  await warnAboutMissingKeys(found.folder, environment.name, variables);
+  await warnAboutMissingKeys(target.folder, environmentLabel(target, environment), variables);
 
   let child: ReturnType<typeof Bun.spawn>;
   try {
