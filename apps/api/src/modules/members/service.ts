@@ -9,6 +9,9 @@ import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 import { applyRotation, type EnvironmentRotation } from "../environments/rotation.ts";
+import { readerIdsOf } from "../environments/key-rules.ts";
+import { assertKeysForEnvironments, checkAccessList, readableEnvironments } from "./access.ts";
+import { changeMemberAccess, type ChangeAccessInput } from "./change-access.ts";
 import type { MemberWithUser } from "./repository.ts";
 
 const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
@@ -162,11 +165,16 @@ export function createMemberService(dependencies: {
       };
     },
 
-    /** Gives a pending member the keys: one wrapped key per environment, made by the admin's client. */
+    /**
+     * Gives a pending member the keys: one wrapped key per environment they
+     * can read, made by the admin's client. `access` (ADR 0019) sets which
+     * stages first; left out, the access they already have stays.
+     */
     async grant(
       context: RequestContext,
       memberId: string,
       wrappedKeys: Array<{ environmentId: string; keyVersion: number; wrappedKey: string }>,
+      requestedAccess?: string[] | null,
     ) {
       const member = await findMemberAsAdmin(context, memberId);
       if (member.status !== "pending") {
@@ -184,7 +192,13 @@ export function createMemberService(dependencies: {
       }
       await runInTransaction(async (transaction) => {
         await transaction.projects.lockForKeyChange(member.projectId);
-        await assertKeyForEveryEnvironment(transaction, member.projectId, wrappedKeys);
+        const memberAccess =
+          requestedAccess === undefined
+            ? member.access
+            : await checkAccessList(transaction, member.projectId, member.role, requestedAccess);
+        await transaction.members.setAccess(member.memberId, memberAccess);
+        const environments = await transaction.environments.listForProject(member.projectId);
+        assertKeysForEnvironments(wrappedKeys, readableEnvironments(environments, memberAccess));
         await transaction.environments.addWrappedKeys(
           wrappedKeys.map((key) => ({
             environmentId: key.environmentId,
@@ -213,6 +227,18 @@ export function createMemberService(dependencies: {
       return toMemberDto({ ...member, status: "active" });
     },
 
+    /** Changes which environments a member can read (ADR 0019). */
+    async changeAccess(context: RequestContext, memberId: string, input: ChangeAccessInput) {
+      const member = await findMemberAsAdmin(context, memberId);
+      const newAccess = await changeMemberAccess(
+        { runInTransaction, clock },
+        context,
+        member,
+        input,
+      );
+      return toMemberDto({ ...member, access: newAccess });
+    },
+
     async changeRole(context: RequestContext, memberId: string, role: MemberRole) {
       const member = await findMemberAsAdmin(context, memberId);
       if (member.role === "owner" || role === "owner") {
@@ -220,6 +246,13 @@ export function createMemberService(dependencies: {
           "OWNER_CANNOT_CHANGE",
           "The owner's role cannot be given or taken here.",
           403,
+        );
+      }
+      if (role === "admin" && member.access !== null) {
+        throw new AppError(
+          "VALIDATION_FAILED",
+          `Give @${member.githubLogin} access to every environment first: admins manage every key.`,
+          400,
         );
       }
       await runInTransaction(async (transaction) => {
@@ -256,16 +289,18 @@ export function createMemberService(dependencies: {
         // otherwise keep a key the removed member can open.
         await transaction.projects.lockForKeyChange(member.projectId);
         const current = await transaction.environments.listForProject(member.projectId);
+        // Only the environments they could read (ADR 0019) need a new key.
+        const readable = readableEnvironments(current, member.access);
         const coversEveryEnvironment = needsRotation
           ? rotationFor.size === rotations.length &&
-            rotations.length === current.length &&
-            current.every((environment) => rotationFor.has(environment.id))
+            rotations.length === readable.length &&
+            readable.every((environment) => rotationFor.has(environment.id))
           : rotations.length === 0;
         if (!coversEveryEnvironment) {
           throw new AppError(
             "ROTATION_MISMATCH",
             needsRotation
-              ? "Removing an active member needs a key rotation for every environment."
+              ? "Removing an active member needs a key rotation for every environment they could read."
               : "This member never had keys, so send no rotations.",
             400,
           );
@@ -288,7 +323,6 @@ export function createMemberService(dependencies: {
           });
         }
         const revokedTokenIds = new Set(revoked.map((token) => token.id));
-        const remaining = new Set(await transaction.members.listActiveUserIds(member.projectId));
         for (const environment of current) {
           const rotation = rotationFor.get(environment.id);
           if (rotation !== undefined) {
@@ -297,7 +331,7 @@ export function createMemberService(dependencies: {
               context,
               environment,
               rotation,
-              remaining,
+              await readerIdsOf(transaction, member.projectId, environment),
               now,
               revokedTokenIds,
             );
@@ -324,29 +358,6 @@ export function createMemberService(dependencies: {
   };
 }
 
-// The new member needs every environment, each at its current key version.
-async function assertKeyForEveryEnvironment(
-  repositories: Repositories,
-  projectId: string,
-  wrappedKeys: Array<{ environmentId: string; keyVersion: number }>,
-): Promise<void> {
-  const environments = await repositories.environments.listForProject(projectId);
-  const expected = new Map(
-    environments.map((environment) => [environment.id, environment.currentKeyVersion]),
-  );
-  const coversEveryEnvironment =
-    wrappedKeys.length === expected.size &&
-    new Set(wrappedKeys.map((key) => key.environmentId)).size === expected.size &&
-    wrappedKeys.every((key) => expected.get(key.environmentId) === key.keyVersion);
-  if (!coversEveryEnvironment) {
-    throw new AppError(
-      "RECIPIENTS_MISMATCH",
-      "Send one wrapped key for every environment, at its current key version.",
-      400,
-    );
-  }
-}
-
 function toMemberDto(member: MemberWithUser) {
   return {
     id: member.memberId,
@@ -358,6 +369,8 @@ function toMemberDto(member: MemberWithUser) {
     status: member.status,
     // Clients compute the fingerprint themselves; a server-made one could lie.
     publicKey: member.publicKey,
+    // Null: every environment; otherwise the stages they can read (ADR 0019).
+    access: member.access,
     createdAt: member.createdAt.toISOString(),
   };
 }

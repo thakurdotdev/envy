@@ -39,6 +39,8 @@ export const ERROR_CODES = [
   "APP_NOT_FOUND",
   "APP_NAME_TAKEN",
   "APP_ENVIRONMENTS_MISMATCH",
+  // Access per environment (ADR 0019)
+  "NO_ENVIRONMENT_ACCESS",
   // Teams
   "KEYS_NOT_SET",
   "INVITE_NOT_FOUND",

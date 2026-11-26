@@ -111,6 +111,9 @@ export const members = pgTable(
     role: memberRole("role").notNull(),
     // pending = joined, but nobody has given them the environment keys yet.
     status: memberStatus("status").notNull(),
+    // Null: every environment. Otherwise the stage names this member can read,
+    // in the root and every app; shared is always included (ADR 0019).
+    environmentAccess: text("environment_access").array(),
     createdAt: createdAt(),
   },
   (table) => [

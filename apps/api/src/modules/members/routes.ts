@@ -2,6 +2,7 @@ import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import {
+  ChangeAccessBody,
   ChangeRoleBody,
   GrantBody,
   InviteBody,
@@ -47,8 +48,14 @@ export function memberRoutes(dependencies: {
     )
     .post(
       "/v1/members/:id/grant",
-      ({ context, params, body }) => members.grant(context, params.id, body.wrappedKeys),
+      ({ context, params, body }) =>
+        members.grant(context, params.id, body.wrappedKeys, body.access),
       { params: MemberIdParams, body: GrantBody },
+    )
+    .put(
+      "/v1/members/:id/access",
+      ({ context, params, body }) => members.changeAccess(context, params.id, body),
+      { params: MemberIdParams, body: ChangeAccessBody },
     )
     .patch(
       "/v1/members/:id",

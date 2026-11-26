@@ -67,3 +67,15 @@ export function separateFromLayers(input: {
   }
   return result;
 }
+
+/**
+ * Whether a member can read an environment (ADR 0019): `access` null means
+ * every environment; otherwise the stage names they have, in the root and
+ * every app. The shared layer is always readable.
+ */
+export function memberCanRead(
+  member: { access: string[] | null },
+  environment: { name: string; isShared: boolean },
+): boolean {
+  return member.access === null || environment.isShared || member.access.includes(environment.name);
+}

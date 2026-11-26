@@ -1,5 +1,5 @@
 import { fromBase64Url, generateEnvKey } from "@envy/crypto";
-import { newUuidV7s } from "@envy/shared";
+import { memberCanRead, newUuidV7s } from "@envy/shared";
 import { listMembers, wrapAsClient, type TestUser } from "./crypto-client.ts";
 import type { TestApp } from "./test-app.ts";
 
@@ -22,7 +22,10 @@ export async function makeStageEnvironments(
     const id = ids[index] ?? "";
     const envKey = await generateEnvKey();
     const wrappedKeys = [];
-    for (const member of members) {
+    // Only members who can read this stage get its key (ADR 0019).
+    for (const member of members.filter((candidate) =>
+      memberCanRead(candidate, { name, isShared: false }),
+    )) {
       wrappedKeys.push({
         userId: member.userId,
         wrappedKey: await wrapAsClient(envKey, admin, await fromBase64Url(member.publicKey), {

@@ -1,6 +1,7 @@
 import { isUniqueViolation } from "../../db/executor.ts";
 import type { EnvironmentRow, SecretVersionRow } from "../../db/schema.ts";
-import { environmentNotFound, type AccessChecker } from "../../lib/access.ts";
+import { memberCanRead } from "@envy/shared";
+import { environmentNotFound, noEnvironmentAccess, type AccessChecker } from "../../lib/access.ts";
 import { assertBase64UrlBytes, base64UrlByteLength, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
 import { DEFAULT_PAGE_SIZE, toPage } from "../../lib/pagination.ts";
@@ -139,6 +140,7 @@ export function createSecretService(dependencies: {
       pushes: Array<PushSecretsInput & { environmentId: string }>,
     ) {
       await access.assertRole(context, projectId, "member");
+      const memberAccess = await access.accessOf(context, projectId);
       if (new Set(pushes.map((push) => push.environmentId)).size !== pushes.length) {
         throw new AppError("VALIDATION_FAILED", "Each environment can appear only once.", 400);
       }
@@ -152,6 +154,9 @@ export function createSecretService(dependencies: {
             const environment = await transaction.environments.findById(push.environmentId);
             if (environment === undefined || environment.projectId !== projectId) {
               throw environmentNotFound();
+            }
+            if (!memberCanRead({ access: memberAccess }, environment)) {
+              throw noEnvironmentAccess(environment.name);
             }
             assertKeyVersionIsCurrent(environment, push);
             const latestVersion = await transaction.secrets.latestVersionNumber(environment.id);

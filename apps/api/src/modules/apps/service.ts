@@ -8,7 +8,7 @@ import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 import {
-  assertKeysForEveryActiveMember,
+  assertKeysForEveryReader,
   assertWrappedKeySizes,
   toWrappedKeyRows,
   type WrappedKeyForMember,
@@ -61,7 +61,12 @@ export function createAppService(dependencies: {
           const stages = await rootStages(transaction, projectId);
           assertOneForEachStage(input.environments, stages);
           for (const environment of input.environments) {
-            await assertKeysForEveryActiveMember(transaction, projectId, environment.wrappedKeys);
+            await assertKeysForEveryReader(
+              transaction,
+              projectId,
+              { name: environment.name, isShared: false },
+              environment.wrappedKeys,
+            );
           }
           const app = await transaction.apps.create({ projectId, name: input.name });
           const environments = await transaction.environments.createMany(

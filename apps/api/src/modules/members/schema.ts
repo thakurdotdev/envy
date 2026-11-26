@@ -1,3 +1,4 @@
+import { NAME_PATTERN } from "@envy/shared";
 import { t } from "elysia";
 
 const base64Url = (maxLength: number) =>
@@ -16,19 +17,29 @@ export const InviteBody = t.Object(
   { additionalProperties: false },
 );
 
+const WrappedKeysForEnvironments = t.Array(
+  t.Object(
+    {
+      environmentId: t.String({ format: "uuid" }),
+      keyVersion: t.Integer({ minimum: 1 }),
+      wrappedKey: base64Url(200),
+    },
+    { additionalProperties: false },
+  ),
+  { maxItems: 200 },
+);
+
+/** Null: every environment. Otherwise stage names, such as ["development"] (ADR 0019). */
+const AccessList = t.Union([
+  t.Null(),
+  t.Array(t.String({ minLength: 1, maxLength: 50, pattern: NAME_PATTERN }), { maxItems: 50 }),
+]);
+
 export const GrantBody = t.Object(
   {
-    wrappedKeys: t.Array(
-      t.Object(
-        {
-          environmentId: t.String({ format: "uuid" }),
-          keyVersion: t.Integer({ minimum: 1 }),
-          wrappedKey: base64Url(200),
-        },
-        { additionalProperties: false },
-      ),
-      { maxItems: 200 },
-    ),
+    wrappedKeys: WrappedKeysForEnvironments,
+    /** Which stages the member gets. Left out: the access they already have. */
+    access: t.Optional(AccessList),
   },
   { additionalProperties: false },
 );
@@ -58,6 +69,15 @@ export const RotationSchema = t.Object(
     baseVersion: t.Integer({ minimum: 0 }),
     ciphertext: t.Optional(base64Url(200_000)),
     nonce: t.Optional(base64Url(100)),
+  },
+  { additionalProperties: false },
+);
+
+export const ChangeAccessBody = t.Object(
+  {
+    access: AccessList,
+    wrappedKeys: WrappedKeysForEnvironments,
+    rotations: t.Array(RotationSchema, { maxItems: 200 }),
   },
   { additionalProperties: false },
 );

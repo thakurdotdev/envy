@@ -21,6 +21,7 @@ export type AuditEvent = {
     | "member.joined"
     | "member.granted"
     | "member.role_changed"
+    | "member.access_changed"
     | "member.removed"
     | "token.created"
     | "token.revoked";

@@ -1,3 +1,4 @@
+import { memberCanRead } from "@envy/shared";
 import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
 import type { Repositories } from "../../repositories.ts";
@@ -7,23 +8,36 @@ import type { Repositories } from "../../repositories.ts";
 
 export type WrappedKeyForMember = { userId: string; wrappedKey: string };
 
-// A member without a wrapped key could not read the new environment, and a
-// key for a non-member would leak access. So the list must match exactly.
-export async function assertKeysForEveryActiveMember(
+/** The active members who can read an environment (ADR 0019). */
+export async function readerIdsOf(
   repositories: Repositories,
   projectId: string,
+  environment: { name: string; isShared: boolean },
+): Promise<Set<string>> {
+  const everyone = await repositories.members.listActiveAccess(projectId);
+  return new Set(
+    everyone.filter((member) => memberCanRead(member, environment)).map((member) => member.userId),
+  );
+}
+
+// A reader without a wrapped key could not read the environment, and a key
+// for anyone else would leak access. So the list must match exactly.
+export async function assertKeysForEveryReader(
+  repositories: Repositories,
+  projectId: string,
+  environment: { name: string; isShared: boolean },
   wrappedKeys: Array<{ userId: string }>,
 ): Promise<void> {
-  const memberIds = new Set(await repositories.members.listActiveUserIds(projectId));
+  const readerIds = await readerIdsOf(repositories, projectId, environment);
   const recipientIds = new Set(wrappedKeys.map((recipient) => recipient.userId));
   const matches =
     recipientIds.size === wrappedKeys.length &&
-    recipientIds.size === memberIds.size &&
-    [...recipientIds].every((userId) => memberIds.has(userId));
+    recipientIds.size === readerIds.size &&
+    [...recipientIds].every((userId) => readerIds.has(userId));
   if (!matches) {
     throw new AppError(
       "RECIPIENTS_MISMATCH",
-      "Wrap the environment key exactly once for every active member of the project.",
+      `Wrap the ${environment.name} key exactly once for every member who can read it.`,
       400,
     );
   }
