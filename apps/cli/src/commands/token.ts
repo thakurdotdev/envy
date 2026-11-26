@@ -7,6 +7,9 @@ import { openSession } from "../core/session.ts";
 import { fetchEnvKey, wrapEnvKeyFor } from "../core/env-keys.ts";
 import { tokenKeyOwner } from "../core/team.ts";
 import { pinConfirmedPublicKeys } from "../core/trust.ts";
+import { layersUnder } from "@envy/shared";
+import { listApps } from "../core/secrets.ts";
+import { environmentLabel } from "../core/targets.ts";
 import { output } from "../ui/output.ts";
 
 export type CreateTokenOptions = EnvironmentOptions & { name?: string; expires?: string };
@@ -20,7 +23,8 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
   const context = await openProjectContext(options);
   const { found, session, environment } = context;
   const keys = await context.unlock();
-  const name = options.name ?? `${environment.name} token`;
+  const label = environmentLabel(context.target, environment);
+  const name = options.name ?? `${label} token`;
   const expiresAt = parseExpiry(options.expires);
 
   const tokenId = randomBytes(24).toString("hex");
@@ -33,6 +37,26 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
     keyVersion,
   });
   await clearKey(envKey);
+  // The server takes exactly the layers under the environment, whatever
+  // .envy.json says about inheritRoot (ADR 0018).
+  const layerWrappedKeys = [];
+  for (const layer of layersUnder(environment, context.environments)) {
+    const layerKey = await fetchEnvKey({
+      session,
+      keys,
+      projectId,
+      environment: layer,
+      keyVersion: layer.currentKeyVersion,
+    });
+    layerWrappedKeys.push({
+      environmentId: layer.id,
+      wrappedKey: await wrapEnvKeyFor(layerKey, keys, tokenKeys.publicKey, {
+        environmentId: layer.id,
+        keyVersion: layer.currentKeyVersion,
+      }),
+    });
+    await clearKey(layerKey);
+  }
 
   const body = {
     environmentId: environment.id,
@@ -40,6 +64,7 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
     tokenIdHash: createHash("sha256").update(tokenId).digest("hex"),
     publicKey: await toBase64Url(tokenKeys.publicKey),
     wrappedKey,
+    layerWrappedKeys,
     ...(expiresAt === undefined ? {} : { expiresAt }),
   };
   const created = await session.call((api) => api.v1.projects({ id: projectId }).tokens.post(body));
@@ -52,7 +77,8 @@ export async function createToken(options: CreateTokenOptions): Promise<void> {
 
   output.info(`Store this as the ENVY_TOKEN secret in your CI. It is shown only once:`);
   output.result(token);
-  output.success(`Created "${name}": it can read ${environment.name} and nothing else.`);
+  const layers = layerWrappedKeys.length === 0 ? "" : " and the layers under it";
+  output.success(`Created "${name}": it can read ${label}${layers}, and nothing else.`);
 }
 
 function parseExpiry(text: string | undefined): string | undefined {
@@ -74,11 +100,12 @@ async function loadTokens() {
   const { items } = await session.call((api) =>
     api.v1.projects({ id: found.link.projectId }).tokens.get(),
   );
-  return { session, items };
+  return { session, items, projectId: found.link.projectId };
 }
 
 export async function listTokens(options: { json?: boolean }): Promise<void> {
-  const { items } = await loadTokens();
+  const { items, session, projectId } = await loadTokens();
+  const appNames = new Map((await listApps(session, projectId)).map((app) => [app.id, app.name]));
   if (options.json === true) {
     output.result(JSON.stringify(items, null, 2));
     return;
@@ -94,7 +121,10 @@ export async function listTokens(options: { json?: boolean }): Promise<void> {
         : token.lastUsedAt === null
           ? "never used"
           : `last used ${new Date(token.lastUsedAt).toISOString().slice(0, 10)}`;
-    output.result(`${token.name.padEnd(24)} ${token.environmentName.padEnd(14)} ${state}`);
+    const app = token.environmentAppId === null ? undefined : appNames.get(token.environmentAppId);
+    const environment =
+      app === undefined ? token.environmentName : `${app}/${token.environmentName}`;
+    output.result(`${token.name.padEnd(24)} ${environment.padEnd(20)} ${state}`);
   }
 }
 

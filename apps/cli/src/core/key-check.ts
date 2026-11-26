@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { loadEnvironmentVariables, type ProjectContext } from "./context.ts";
+import { type ProjectContext } from "./context.ts";
+import { loadEnvironmentVariables } from "./layered-pull.ts";
 import { readEnvFile } from "./env-file.ts";
 
 export type KeyCheck = { check: string; status: "ok" | "warning"; message: string };

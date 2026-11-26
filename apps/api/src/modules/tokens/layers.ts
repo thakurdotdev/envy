@@ -1,7 +1,7 @@
 import type { EnvironmentRow } from "../../db/schema.ts";
 import { AppError } from "../../lib/errors.ts";
 import type { Repositories } from "../../repositories.ts";
-import { layersUnder } from "../environments/layers.ts";
+import { layersUnder } from "@envy/shared";
 
 // A token reads its environment and the layers under it (ADR 0018).
 

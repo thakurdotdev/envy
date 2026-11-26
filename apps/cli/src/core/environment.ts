@@ -2,6 +2,8 @@ import { CliError } from "./errors.ts";
 
 export type EnvironmentSummary = {
   id: string;
+  /** Null for the project's own (root) environments. */
+  appId: string | null;
   name: string;
   isShared: boolean;
   isProtected: boolean;

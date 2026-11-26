@@ -10,7 +10,7 @@ let project: string;
 let outside: string;
 
 function foundWithFile(file: string): FoundProjectLink {
-  const link = { projectId: "p", defaultEnvironment: "development", file, branches: {} };
+  const link = { projectId: "p", defaultEnvironment: "development", file, branches: {}, apps: {} };
   return { link, folder: project, path: join(project, ".envy.json") };
 }
 

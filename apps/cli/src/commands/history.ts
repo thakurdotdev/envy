@@ -2,6 +2,7 @@ import { decryptSecrets, fromBase64Url } from "@envy/crypto";
 import { fetchEnvKey } from "../core/env-keys.ts";
 import { openProjectContext, type EnvironmentOptions } from "../core/context.ts";
 import { CliError } from "../core/errors.ts";
+import { environmentLabel } from "../core/targets.ts";
 import { pullEnvironment, pushEnvironment } from "../core/secrets.ts";
 import { setPulledVersion } from "../core/settings.ts";
 import { diffKeys, formatDiff } from "../ui/diff.ts";
@@ -11,7 +12,9 @@ import { askConfirm } from "../ui/prompts.ts";
 export async function history(
   options: EnvironmentOptions & { limit?: string; json?: boolean },
 ): Promise<void> {
-  const { session, environment } = await openProjectContext(options);
+  const context = await openProjectContext(options);
+  const { session, environment } = context;
+  const label = environmentLabel(context.target, environment);
   const limit = Math.min(Number(options.limit ?? "20") || 20, 100);
   const result = await session.call((api) =>
     api.v1.environments({ id: environment.id }).versions.get({ query: { limit } }),
@@ -21,7 +24,7 @@ export async function history(
     return;
   }
   if (result.items.length === 0) {
-    output.success(`${environment.name} has no versions yet.`);
+    output.success(`${label} has no versions yet.`);
     return;
   }
   for (const item of result.items) {
@@ -42,6 +45,7 @@ export async function rollback(versionText: string, options: EnvironmentOptions)
   }
   const context = await openProjectContext(options);
   const { found, session, environment } = context;
+  const label = environmentLabel(context.target, environment);
   const keys = await context.unlock();
   const projectId = found.link.projectId;
 
@@ -49,7 +53,7 @@ export async function rollback(versionText: string, options: EnvironmentOptions)
     api.v1.environments({ id: environment.id }).secrets.get({ query: { version } }),
   );
   if (old === null) {
-    throw new CliError(`${environment.name} has no version ${version}.`);
+    throw new CliError(`${label} has no version ${version}.`);
   }
   const oldKey = await fetchEnvKey({
     session,
@@ -68,7 +72,7 @@ export async function rollback(versionText: string, options: EnvironmentOptions)
   output.info(formatDiff(diffKeys(latest.secrets, oldSecrets)));
   if (options.yes !== true) {
     const confirmed = await askConfirm(
-      `Make version ${version} the current ${environment.name}?`,
+      `Make version ${version} the current ${label}?`,
       "Add --yes to roll back.",
     );
     if (!confirmed) {
@@ -85,9 +89,7 @@ export async function rollback(versionText: string, options: EnvironmentOptions)
     message: `Rollback to version ${version}`,
   });
   await setPulledVersion(environment.id, newVersion);
-  output.success(
-    `Rolled ${environment.name} back to version ${version} (saved as version ${newVersion}).`,
-  );
+  output.success(`Rolled ${label} back to version ${version} (saved as version ${newVersion}).`);
 }
 
 // Eden turns ISO date strings into Date objects at runtime even though the

@@ -9,6 +9,14 @@ function linkWithFile(file: string): string {
   });
 }
 
+function withApps(apps: unknown): string {
+  return JSON.stringify({
+    projectId: "0193a6f0-0000-7000-8000-000000000001",
+    defaultEnvironment: "development",
+    apps,
+  });
+}
+
 describe("parseProjectLink", () => {
   test("reads a valid file and fills in the default file name", () => {
     const link = parseProjectLink(
@@ -25,6 +33,7 @@ describe("parseProjectLink", () => {
       defaultEnvironment: "development",
       file: ".env",
       branches: { staging: "staging" },
+      apps: {},
     });
   });
 
@@ -48,5 +57,34 @@ describe("parseProjectLink", () => {
     expect(parseProjectLink(linkWithFile("apps/web/.env.local"), ".envy.json").file).toBe(
       "apps/web/.env.local",
     );
+  });
+
+  test("reads apps, fills in their defaults, and refuses folders outside the repo", () => {
+    const link = parseProjectLink(
+      JSON.stringify({
+        projectId: "0193a6f0-0000-7000-8000-000000000001",
+        defaultEnvironment: "development",
+        apps: {
+          web: { path: "./apps/web/", file: ".env.local" },
+          api: { path: "apps/api", inheritRoot: false },
+        },
+      }),
+      ".envy.json",
+    );
+    expect(link.apps).toEqual({
+      web: { path: "apps/web", file: ".env.local", inheritRoot: true },
+      api: { path: "apps/api", file: ".env", inheritRoot: false },
+    });
+    for (const path of ["../other", "/etc", ".", "apps/../../x"]) {
+      expect(() => parseProjectLink(withApps({ web: { path } }), ".envy.json")).toThrow(
+        '"apps.web.path"',
+      );
+    }
+    expect(() => parseProjectLink(withApps({ root: { path: "x" } }), ".envy.json")).toThrow(
+      "not a valid app name",
+    );
+    expect(() =>
+      parseProjectLink(withApps({ a: { path: "x" }, b: { path: "./x" } }), ".envy.json"),
+    ).toThrow("two apps use the folder x");
   });
 });

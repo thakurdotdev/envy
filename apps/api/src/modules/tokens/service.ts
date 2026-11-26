@@ -6,7 +6,7 @@ import { AppError } from "../../lib/errors.ts";
 import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
-import { layersUnder } from "../environments/layers.ts";
+import { layersUnder } from "@envy/shared";
 import { chooseLayers, toTokenEnvironment } from "./layers.ts";
 import type { TokenActor } from "../auth/service.ts";
 

@@ -2,10 +2,11 @@ import type { App } from "@envy/api";
 import { treaty } from "@elysiajs/eden";
 import { fromBase64Url, getPublicKey } from "@envy/crypto";
 import { join } from "node:path";
-import type { ProjectContext } from "./context.ts";
+import type { EnvironmentOptions, ProjectContext } from "./context.ts";
 import { CliError, EXIT_CODES } from "./errors.ts";
 import { findProjectLink, LINK_FILE_NAME } from "./project-link.ts";
 import { callApi, type ApiCaller } from "./session.ts";
+import { chooseTarget } from "./targets.ts";
 import { resolveApiUrl } from "./settings.ts";
 
 // A service token is `envy_<tokenId>_<privateKey>`. Only `envy_<tokenId>`
@@ -40,14 +41,14 @@ export function createTokenCaller(apiUrl: string, token: ServiceToken): ApiCalle
 /** The context for `run`, `pull` and `get` when ENVY_TOKEN is set. */
 export async function openTokenContext(
   token: ServiceToken,
-  requestedEnvironment: string | undefined,
+  options: EnvironmentOptions,
 ): Promise<ProjectContext> {
   const caller = createTokenCaller(await resolveApiUrl(), token);
   const current = await caller.call((api) => api.v1.tokens.current.get());
   const environment = current.environment;
-  if (requestedEnvironment !== undefined && requestedEnvironment !== environment.name) {
-    throw new CliError(`This token only reads ${environment.name}, not ${requestedEnvironment}.`, {
-      hint: `Create a token for ${requestedEnvironment} with envy token create --env ${requestedEnvironment}.`,
+  if (options.env !== undefined && options.env !== environment.name) {
+    throw new CliError(`This token only reads ${environment.name}, not ${options.env}.`, {
+      hint: `Create a token for ${options.env} with envy token create --env ${options.env}.`,
     });
   }
   // .envy.json is optional with a token: the token already names the project.
@@ -61,17 +62,23 @@ export async function openTokenContext(
       defaultEnvironment: environment.name,
       file: linked?.link.file ?? ".env",
       branches: {},
+      apps: linked?.link.apps ?? {},
     },
   };
+  // The folder decides which file `envy pull` writes; the token decides what it reads.
+  const target = chooseTarget(found, options.app);
+  // Tokens made before apps existed (or by an older envy) read no layers (ADR 0018).
+  const layers = (current.layers ?? []).filter((layer) => layer.isShared || target.inheritRoot);
   const privateKey = await fromBase64Url(token.privateKey);
   const keys = { privateKey, publicKey: await getPublicKey(privateKey) };
   return {
     found,
     session: caller,
-    environments: [environment],
+    environments: [...layers, environment],
+    appIds: new Map(),
+    target,
     environment,
-    // A token reads exactly one environment, so the shared layer is not merged in.
-    sharedEnvironment: undefined,
+    layers,
     unlock: async () => keys,
     canUnlockWithoutAsking: true,
   };

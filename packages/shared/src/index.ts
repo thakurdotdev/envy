@@ -37,3 +37,10 @@ export {
   type WrappedKeyFromServer,
 } from "./trust.ts";
 export { newUuidV7s } from "./ids.ts";
+export {
+  layersUnder,
+  mergeLayers,
+  separateFromLayers,
+  type LayeredEnvironment,
+  type Variables,
+} from "./layers.ts";
