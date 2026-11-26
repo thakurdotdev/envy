@@ -19,7 +19,7 @@ import {
   type KdfParams,
   type Secrets,
 } from "@envy/crypto";
-import { newUuidV7s } from "@envy/shared";
+import { layersUnder, newUuidV7s, ROOT_APP_NAME } from "@envy/shared";
 import { ApiError, call } from "./api";
 import {
   checkNotRolledBack,
@@ -42,6 +42,8 @@ export type UnlockedKeys = KeyPair & { trust: WebTrust };
 
 export type EnvironmentSummary = {
   id: string;
+  /** Null for the project's own (root) environments; set for an app's (ADR 0018). */
+  appId: string | null;
   name: string;
   isShared: boolean;
   isProtected: boolean;
@@ -216,8 +218,31 @@ export async function createProject(keys: UnlockedKeys, name: string) {
   return call((api) => api.v1.projects.post({ name, environmentKeys, environmentIds }));
 }
 
+/** Every environment of the project: the root ones and every app's (ADR 0018). */
 export async function listEnvironments(projectId: string): Promise<EnvironmentSummary[]> {
-  return (await call((api) => api.v1.projects({ id: projectId }).environments.get())).items;
+  const result = await call((api) =>
+    api.v1.projects({ id: projectId }).environments.get({ query: { apps: "true" } }),
+  );
+  return result.items;
+}
+
+export type AppSummary = { id: string; name: string };
+
+/** The apps of a monorepo project, oldest first. Empty for a single-folder project. */
+export async function listApps(projectId: string): Promise<AppSummary[]> {
+  return (await call((api) => api.v1.projects({ id: projectId }).apps.get())).items;
+}
+
+/** "production" for the root, "web/production" for an app's environment. */
+export function environmentDisplayName(
+  environment: { appId: string | null; name: string },
+  apps: AppSummary[],
+): string {
+  if (environment.appId === null) {
+    return environment.name;
+  }
+  const app = apps.find((candidate) => candidate.id === environment.appId);
+  return `${app?.name ?? ROOT_APP_NAME}/${environment.name}`;
 }
 
 type EnvironmentRef = { id: string; name: string };
@@ -410,10 +435,13 @@ export async function removeMember(
         });
       }
     }
-    // Service tokens for this environment get the new key too, so CI keeps working.
+    // Service tokens that read this environment (as theirs or as a layer
+    // under it, ADR 0018) get the new key too, so CI keeps working.
     const tokenWrappedKeys: Rotation["tokenWrappedKeys"] = [];
     for (const token of activeTokens.filter(
-      (candidate) => candidate.environmentId === environment.id,
+      (candidate) =>
+        candidate.environmentId === environment.id ||
+        candidate.layerEnvironmentIds.includes(environment.id),
     )) {
       tokenWrappedKeys.push({
         tokenId: token.id,
@@ -486,6 +514,8 @@ export async function createServiceToken(
   keys: UnlockedKeys,
   projectId: string,
   environment: EnvironmentSummary,
+  /** Every environment of the project, to find the layers the token also reads. */
+  allEnvironments: EnvironmentSummary[],
   name: string,
   expiresAt?: Date,
 ): Promise<string> {
@@ -503,6 +533,13 @@ export async function createServiceToken(
       environmentId: environment.id,
       keyVersion,
     }),
+    layerWrappedKeys: await wrapLayersFor(
+      keys,
+      projectId,
+      tokenKeys.publicKey,
+      environment,
+      allEnvironments,
+    ),
     ...(expiresAt === undefined ? {} : { expiresAt: expiresAt.toISOString() }),
   };
   await clearKey(envKey);
@@ -514,4 +551,31 @@ export async function createServiceToken(
   const token = `envy_${tokenId}_${await toBase64Url(tokenKeys.privateKey)}`;
   await clearKey(tokenKeys.privateKey);
   return token;
+}
+
+/**
+ * The keys of the layers under an environment (shared, and the root stage
+ * for an app), wrapped for a new token so CI reads what `envy run` would.
+ */
+async function wrapLayersFor(
+  keys: UnlockedKeys,
+  projectId: string,
+  recipientPublicKey: Uint8Array,
+  environment: EnvironmentSummary,
+  allEnvironments: EnvironmentSummary[],
+): Promise<Array<{ environmentId: string; wrappedKey: string }>> {
+  const wrapped = [];
+  for (const layer of layersUnder(environment, allEnvironments)) {
+    const keyVersion = layer.currentKeyVersion;
+    const layerKey = await getEnvKey(keys, projectId, layer, keyVersion);
+    wrapped.push({
+      environmentId: layer.id,
+      wrappedKey: await wrapFor(layerKey, keys, recipientPublicKey, {
+        environmentId: layer.id,
+        keyVersion,
+      }),
+    });
+    await clearKey(layerKey);
+  }
+  return wrapped;
 }

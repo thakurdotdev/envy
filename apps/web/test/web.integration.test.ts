@@ -286,6 +286,33 @@ describe("dashboard navigation and actions", () => {
   }, 120_000);
 });
 
+describe("monorepo apps (ADR 0018)", () => {
+  test("an app made with the CLI has its own environments behind the app picker", async () => {
+    const home = join(workspace, "home");
+    const repo = join(workspace, "mono");
+    await mkdir(join(repo, "apps", "web"), { recursive: true });
+    await writeFile(join(repo, "package.json"), JSON.stringify({ workspaces: ["apps/*"] }));
+    await writeFile(join(repo, "apps", "web", ".env"), "WEB_ONLY=from-the-app\n");
+    const init = await runEnvy(["init", "--create", "Mono Web", "--yes"], repo, home);
+    expect(init.stderr).toContain("Added the app web");
+
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${webServer.port}/projects`);
+    await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+    await unlock(page);
+    await page.getByRole("link", { name: /Mono Web/ }).click();
+    await page.getByRole("tab", { name: /development/ }).waitFor();
+    // The root has no WEB_ONLY; the web app does.
+    await page.getByText("development has no variables yet").first().waitFor();
+    await page.getByLabel("App").click();
+    await page.getByRole("option", { name: "web" }).click();
+    await page.getByText("Merged on top of shared and the root's development").waitFor();
+    await page.getByRole("button", { name: "Show WEB_ONLY" }).click();
+    await expectLocator(page.getByLabel("Value of WEB_ONLY")).toHaveValue("from-the-app");
+    await page.close();
+  }, 120_000);
+});
+
 // Playwright's own `expect` is not used, so this small bridge waits for
 // visibility and values with bun:test assertions.
 function expectLocator(locator: ReturnType<Page["getByTestId"]>) {
