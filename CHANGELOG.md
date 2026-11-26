@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-26)
 
 - New: delete a project (owner only) with `envy projects rm` or the dashboard's new project **Settings** page, which also renames it. A deleted project can be restored for 30 days (`envy projects restore`, or **Recently deleted** on the projects page); after that the API removes it for good.
 - CLI: `envy projects ls [--deleted]`.
