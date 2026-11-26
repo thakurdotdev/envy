@@ -144,10 +144,16 @@ export function createProjectService(dependencies: {
       return toProjectDto(await findProject(repositories, projectId), role);
     },
 
-    async deleteProject(context: RequestContext, projectId: string): Promise<void> {
+    /**
+     * Hides the project at once: nobody can read it, and its service tokens
+     * stop working. The owner can restore it for 30 days; then it is removed
+     * for good.
+     */
+    async deleteProject(context: RequestContext, projectId: string) {
       await access.assertRole(context, projectId, "owner");
+      const deletedAt = clock.now();
       await runInTransaction(async (transaction) => {
-        await transaction.projects.softDelete(projectId, clock.now());
+        await transaction.projects.softDelete(projectId, deletedAt);
         await recordAuditEvent(transaction.audit, context, {
           projectId,
           action: "project.deleted",
@@ -155,8 +161,68 @@ export function createProjectService(dependencies: {
           targetId: projectId,
         });
       });
+      return { purgeAfter: purgeDate(deletedAt).toISOString() };
+    },
+
+    /** The caller's own deleted projects that can still be restored. */
+    async listDeletedProjects(context: RequestContext) {
+      const ownerId = requireUser(context.actor).userId;
+      const since = new Date(clock.now().getTime() - RESTORE_DAYS * DAY_MS);
+      const rows = await repositories.projects.listDeletedOwnedBy(ownerId, since);
+      return {
+        items: rows.map((row) => ({
+          ...toProjectDto(row, "owner"),
+          deletedAt: row.deletedAt?.toISOString() ?? null,
+          purgeAfter: row.deletedAt === null ? null : purgeDate(row.deletedAt).toISOString(),
+        })),
+      };
+    },
+
+    /** Brings back a project its owner deleted less than 30 days ago. */
+    async restoreProject(context: RequestContext, projectId: string) {
+      const ownerId = requireUser(context.actor).userId;
+      const project = await repositories.projects.findDeletedById(projectId);
+      const restorable =
+        project !== undefined &&
+        project.ownerId === ownerId &&
+        project.deletedAt !== null &&
+        purgeDate(project.deletedAt) > clock.now();
+      if (!restorable) {
+        throw projectNotFound();
+      }
+      try {
+        await runInTransaction(async (transaction) => {
+          if (!(await transaction.projects.restore(projectId))) {
+            throw projectNotFound();
+          }
+          await recordAuditEvent(transaction.audit, context, {
+            projectId,
+            action: "project.restored",
+            targetType: "project",
+            targetId: projectId,
+          });
+        });
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new AppError(
+            "PROJECT_SLUG_TAKEN",
+            `You made another project called "${project.slug}" since. Rename that one first.`,
+            409,
+          );
+        }
+        throw error;
+      }
+      return toProjectDto({ ...project, deletedAt: null }, "owner");
     },
   };
+}
+
+/** How long a deleted project can be restored before it is removed for good. */
+export const RESTORE_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function purgeDate(deletedAt: Date): Date {
+  return new Date(deletedAt.getTime() + RESTORE_DAYS * DAY_MS);
 }
 
 async function findProject(repositories: Repositories, projectId: string): Promise<ProjectRow> {

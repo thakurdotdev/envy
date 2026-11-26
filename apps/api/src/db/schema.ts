@@ -82,7 +82,8 @@ export const projects = pgTable(
       .notNull()
       .references(() => users.id),
     createdAt: createdAt(),
-    // Deleted projects are hidden at once and removed for good later.
+    // Deleted projects are hidden at once, can be restored for 30 days, and
+    // are then removed for good (projects/purge.ts).
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
@@ -220,7 +221,8 @@ export const environmentKeys = pgTable(
   ],
 );
 
-// Append-only: repository code never updates or deletes these rows.
+// Append-only: repository code never updates or deletes these rows, except
+// when a deleted project is removed for good after 30 days.
 export const secretVersions = pgTable(
   "secret_versions",
   {
@@ -285,7 +287,8 @@ export const serviceTokens = pgTable(
 
 export const actorType = pgEnum("actor_type", ["user", "token"]);
 
-// Append-only, and never holds secret values: only who did what, and when.
+// Append-only (until its deleted project is removed for good), and never
+// holds secret values: only who did what, and when.
 export const auditLog = pgTable(
   "audit_log",
   {

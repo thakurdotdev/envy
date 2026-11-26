@@ -53,6 +53,7 @@ const ACTIONS: Record<string, { label: string; describe?: (metadata: Metadata) =
     describe: (m) => `to ${String(m["name"] ?? "")}`,
   },
   "project.deleted": { label: "Deleted the project" },
+  "project.restored": { label: "Restored the project" },
   "app.created": {
     label: "Added an app",
     describe: (m) => String(m["name"] ?? ""),

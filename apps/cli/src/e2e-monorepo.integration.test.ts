@@ -108,5 +108,15 @@ describe("a monorepo, end to end (ADR 0018)", () => {
     const afterRemoval: unknown = JSON.parse(await readFile(join(repo, ".envy.json"), "utf8"));
     expect(afterRemoval).not.toMatchObject({ apps: { api: {} } });
     expect((await envy(["pull"])).exitCode).toBe(0);
+
+    // Deleting asks for nothing more with --yes, and can be undone for 30 days.
+    const deleted = await envy(["projects", "rm", "Mono", "--yes"]);
+    expect(deleted.stderr).toContain("Deleted Mono. You can restore it until");
+    expect((await envy(["pull"])).exitCode).toBe(1);
+    const listedDeleted = await envy(["projects", "ls", "--deleted"]);
+    expect(listedDeleted.stdout).toContain("mono");
+    const restored = await envy(["projects", "restore", "mono"]);
+    expect(restored.stderr).toContain("Restored Mono");
+    expect((await envy(["pull"])).exitCode).toBe(0);
   }, 180_000);
 });

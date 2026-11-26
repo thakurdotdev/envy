@@ -26,6 +26,14 @@ export function projectRoutes(dependencies: {
       },
       { body: CreateProjectBody },
     )
+    .get("/v1/projects/deleted", ({ context }) => projects.listDeletedProjects(context))
+    .post(
+      "/v1/projects/:id/restore",
+      ({ context, params }) => projects.restoreProject(context, params.id),
+      {
+        params: ProjectIdParams,
+      },
+    )
     .get("/v1/projects/:id", ({ context, params }) => projects.getProject(context, params.id), {
       params: ProjectIdParams,
     })
@@ -36,10 +44,7 @@ export function projectRoutes(dependencies: {
     )
     .delete(
       "/v1/projects/:id",
-      async ({ context, params, set }) => {
-        await projects.deleteProject(context, params.id);
-        set.status = 204;
-      },
+      ({ context, params }) => projects.deleteProject(context, params.id),
       { params: ProjectIdParams },
     );
 }

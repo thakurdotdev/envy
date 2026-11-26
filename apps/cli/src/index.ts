@@ -23,6 +23,7 @@ import {
 } from "./commands/members.ts";
 import { completion } from "./commands/completion.ts";
 import { doctor } from "./commands/doctor.ts";
+import { deleteProject, listProjects, restoreProject } from "./commands/projects.ts";
 import { addAppCommand, listProjectApps, removeAppCommand } from "./commands/apps.ts";
 import { addEnvironment, listProjectEnvironments } from "./commands/environments.ts";
 import { menu } from "./commands/menu.ts";
@@ -198,6 +199,25 @@ program
   .description("join a project with the invite link you were sent")
   .argument("<link>")
   .action(acceptInvite);
+
+const projects = program.command("projects").description("list, delete and restore projects");
+projects
+  .command("ls")
+  .description("list your projects")
+  .option("--deleted", "list your deleted projects that can still be restored")
+  .option(...jsonOption)
+  .action(listProjects);
+projects
+  .command("rm")
+  .description("delete a project (owner only; it can be restored for 30 days)")
+  .argument("<project>", "name, slug or id")
+  .option(...yesOption)
+  .action(deleteProject);
+projects
+  .command("restore")
+  .description("bring back a project you deleted less than 30 days ago")
+  .argument("<project>", "name, slug or id")
+  .action(restoreProject);
 
 const apps = program.command("apps").description("apps of a monorepo, each with its own .env");
 apps
