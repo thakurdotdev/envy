@@ -90,6 +90,10 @@ const FIXES: Record<ErrorCode, { hint?: string; exitCode: ExitCode }> = {
     exitCode: EXIT_CODES.userError,
     hint: "Try again; the project's apps or environments changed meanwhile.",
   },
+  NO_ENVIRONMENT_ACCESS: {
+    exitCode: EXIT_CODES.userError,
+    hint: "Ask a project admin for access, or pick another environment with --env.",
+  },
   ROTATION_MISMATCH: {
     exitCode: EXIT_CODES.userError,
     hint: "Try again; the project changed meanwhile.",

@@ -15,7 +15,7 @@ import {
   type Secrets,
   type UserKeys,
 } from "@envy/crypto";
-import { newUuidV7s } from "@envy/shared";
+import { memberCanRead, newUuidV7s } from "@envy/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { makeGitHubUser } from "./fake-github.ts";
 import { readField, type TestApp } from "./test-app.ts";
@@ -237,13 +237,23 @@ export async function listMembers(testApp: TestApp, user: TestUser, projectId: s
     status: readField(item, "status"),
     role: readField(item, "role"),
     publicKey: readField(item, "publicKey"),
+    access: readAccess(item),
   }));
 }
 
-type EnvironmentInfo = {
+/** A member's access list: null for every environment (ADR 0019). */
+function readAccess(item: unknown): string[] | null {
+  const value = readObject(item, "access");
+  return Array.isArray(value)
+    ? value.filter((name): name is string => typeof name === "string")
+    : null;
+}
+
+export type EnvironmentInfo = {
   id: string;
   appId: string | null;
   name: string;
+  isShared: boolean;
   currentKeyVersion: number;
   latestVersion: number;
 };
@@ -265,6 +275,7 @@ export async function listEnvironmentInfo(
     id: readField(item, "id"),
     appId: readObject(item, "appId") === null ? null : readField(item, "appId"),
     name: readField(item, "name"),
+    isShared: readObject(item, "isShared") === true,
     currentKeyVersion: readNumber(item, "currentKeyVersion"),
     latestVersion: readNumber(item, "latestVersion"),
   }));
@@ -276,10 +287,15 @@ export async function grantAsClient(
   admin: TestUser,
   projectId: string,
   member: { id: string; publicKey: string },
+  /** Which stages (ADR 0019); left out, every environment. */
+  access?: string[],
 ) {
   const memberPublicKey = await fromBase64Url(member.publicKey);
   const wrappedKeys = [];
-  for (const environment of await listEnvironmentInfo(testApp, admin, projectId)) {
+  const readable = (await listEnvironmentInfo(testApp, admin, projectId)).filter((environment) =>
+    memberCanRead({ access: access ?? null }, environment),
+  );
+  for (const environment of readable) {
     const envKey = await fetchEnvKey(testApp, admin, environment.id);
     wrappedKeys.push({
       environmentId: environment.id,
@@ -292,7 +308,7 @@ export async function grantAsClient(
   }
   return testApp.request("POST", `/v1/members/${member.id}/grant`, {
     accessToken: admin.accessToken,
-    body: { wrappedKeys },
+    body: { wrappedKeys, ...(access === undefined ? {} : { access }) },
   });
 }
 
@@ -307,52 +323,80 @@ export async function removeAsClient(
   memberId: string,
   tokenWrappedKeys: Record<string, Array<{ tokenId: string; wrappedKey: string }>> = {},
 ) {
-  const remaining = (await listMembers(testApp, admin, projectId)).filter(
+  const everyone = await listMembers(testApp, admin, projectId);
+  const leaving = everyone.find((member) => member.id === memberId);
+  const remaining = everyone.filter(
     (member) => member.id !== memberId && member.status === "active",
   );
   const rotations = [];
+  // Only what the member could read needs a new key (ADR 0019).
   for (const environment of await listEnvironmentInfo(testApp, admin, projectId)) {
-    const newEnvKey = await generateEnvKey();
-    const newKeyVersion = environment.currentKeyVersion + 1;
-    const wrappedKeys = [];
-    for (const member of remaining) {
-      wrappedKeys.push({
-        userId: member.userId,
-        wrappedKey: await wrapAsClient(newEnvKey, admin, await fromBase64Url(member.publicKey), {
-          environmentId: environment.id,
-          keyVersion: newKeyVersion,
-        }),
-      });
+    if (leaving !== undefined && !memberCanRead(leaving, environment)) {
+      continue;
     }
-    const rotation: Record<string, unknown> = {
-      environmentId: environment.id,
-      newKeyVersion,
-      wrappedKeys,
-      baseVersion: environment.latestVersion,
-      ...(tokenWrappedKeys[environment.id] === undefined
-        ? {}
-        : { tokenWrappedKeys: tokenWrappedKeys[environment.id] }),
-    };
-    if (environment.latestVersion > 0) {
-      const latest = await pullSecretsAsClient(testApp, admin, {
+    rotations.push(
+      await rotateAsClient(
+        testApp,
+        admin,
         projectId,
-        environmentId: environment.id,
-      });
-      const encrypted = await encryptSecrets(latest, newEnvKey, {
-        projectId,
-        environmentId: environment.id,
-        version: environment.latestVersion + 1,
-        keyVersion: newKeyVersion,
-      });
-      rotation["ciphertext"] = await toBase64Url(encrypted.ciphertext);
-      rotation["nonce"] = await toBase64Url(encrypted.nonce);
-    }
-    rotations.push(rotation);
+        environment,
+        remaining.filter((member) => memberCanRead(member, environment)),
+        tokenWrappedKeys[environment.id],
+      ),
+    );
   }
   return testApp.request("DELETE", `/v1/members/${memberId}`, {
     accessToken: admin.accessToken,
     body: { rotations },
   });
+}
+
+/**
+ * One environment's rotation as a client makes it: a new key wrapped for
+ * `recipients`, and the latest secrets encrypted again with it.
+ */
+export async function rotateAsClient(
+  testApp: TestApp,
+  admin: TestUser,
+  projectId: string,
+  environment: EnvironmentInfo,
+  recipients: Array<{ userId: string; publicKey: string }>,
+  tokenWrappedKeys?: Array<{ tokenId: string; wrappedKey: string }>,
+) {
+  const newEnvKey = await generateEnvKey();
+  const newKeyVersion = environment.currentKeyVersion + 1;
+  const wrappedKeys = [];
+  for (const member of recipients) {
+    wrappedKeys.push({
+      userId: member.userId,
+      wrappedKey: await wrapAsClient(newEnvKey, admin, await fromBase64Url(member.publicKey), {
+        environmentId: environment.id,
+        keyVersion: newKeyVersion,
+      }),
+    });
+  }
+  const rotation: Record<string, unknown> = {
+    environmentId: environment.id,
+    newKeyVersion,
+    wrappedKeys,
+    baseVersion: environment.latestVersion,
+    ...(tokenWrappedKeys === undefined ? {} : { tokenWrappedKeys }),
+  };
+  if (environment.latestVersion > 0) {
+    const latest = await pullSecretsAsClient(testApp, admin, {
+      projectId,
+      environmentId: environment.id,
+    });
+    const encrypted = await encryptSecrets(latest, newEnvKey, {
+      projectId,
+      environmentId: environment.id,
+      version: environment.latestVersion + 1,
+      keyVersion: newKeyVersion,
+    });
+    rotation["ciphertext"] = await toBase64Url(encrypted.ciphertext);
+    rotation["nonce"] = await toBase64Url(encrypted.nonce);
+  }
+  return rotation;
 }
 
 /** Makes a service token the way the CLI does, and returns its bearer header value. */

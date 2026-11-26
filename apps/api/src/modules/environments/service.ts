@@ -1,3 +1,4 @@
+import { memberCanRead } from "@envy/shared";
 import { isUniqueViolation } from "../../db/executor.ts";
 import type { EnvironmentRow } from "../../db/schema.ts";
 import { projectNotFound, type AccessChecker } from "../../lib/access.ts";
@@ -7,7 +8,8 @@ import { requireUser, actorId, type RequestContext } from "../../lib/request-con
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
 import {
-  assertKeysForEveryActiveMember,
+  assertKeysForEveryReader,
+  readerIdsOf,
   assertOneForEachApp,
   assertWrappedKeySizes,
   toWrappedKeyRows,
@@ -35,21 +37,27 @@ export function createEnvironmentService(dependencies: {
   return {
     async listEnvironments(context: RequestContext, projectId: string, includeApps: boolean) {
       const actor = context.actor;
+      let memberAccess: string[] | null = null;
       if (actor.type === "token") {
         if (actor.projectId !== projectId) {
           throw projectNotFound();
         }
       } else {
         await access.assertRole(context, projectId, "viewer");
+        memberAccess = await access.accessOf(context, projectId);
       }
       const all = await repositories.environments.listForProject(projectId);
-      // A service token sees only its environment and the layers under it.
+      // A service token sees only its environment and the layers under it; a
+      // member only the environments they can read (ADR 0019).
       const rows =
         actor.type === "token"
           ? all.filter(
               (row) => row.id === actor.environmentId || actor.layerEnvironmentIds.includes(row.id),
             )
-          : all.filter((row) => includeApps || row.appId === null);
+          : all.filter(
+              (row) =>
+                (includeApps || row.appId === null) && memberCanRead({ access: memberAccess }, row),
+            );
       return {
         items: rows.map((row) => ({ ...toEnvironmentDto(row), latestVersion: row.latestVersion })),
       };
@@ -75,11 +83,13 @@ export function createEnvironmentService(dependencies: {
         const environment = await runInTransaction(async (transaction) => {
           await transaction.projects.lockForKeyChange(projectId);
           await assertOneForEachApp(transaction, projectId, appEnvironments);
-          await assertKeysForEveryActiveMember(transaction, projectId, input.wrappedKeys);
+          const stage = { name: input.name, isShared: false };
+          await assertKeysForEveryReader(transaction, projectId, stage, input.wrappedKeys);
           for (const appEnvironment of appEnvironments) {
-            await assertKeysForEveryActiveMember(
+            await assertKeysForEveryReader(
               transaction,
               projectId,
+              stage,
               appEnvironment.wrappedKeys,
             );
           }
@@ -139,9 +149,7 @@ export function createEnvironmentService(dependencies: {
       const environment = await access.assertEnvironmentRole(context, environmentId, "admin");
       await runInTransaction(async (transaction) => {
         await transaction.projects.lockForKeyChange(environment.projectId);
-        const recipients = new Set(
-          await transaction.members.listActiveUserIds(environment.projectId),
-        );
+        const recipients = await readerIdsOf(transaction, environment.projectId, environment);
         await applyRotation(
           transaction,
           context,

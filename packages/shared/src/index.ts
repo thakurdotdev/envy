@@ -39,6 +39,7 @@ export {
 export { newUuidV7s } from "./ids.ts";
 export {
   layersUnder,
+  memberCanRead,
   mergeLayers,
   separateFromLayers,
   type LayeredEnvironment,

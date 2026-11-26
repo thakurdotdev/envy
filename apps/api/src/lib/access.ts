@@ -1,6 +1,7 @@
 import type { EnvironmentRow, MemberRole } from "../db/schema.ts";
 import type { EnvironmentRepository } from "../modules/environments/repository.ts";
 import type { MemberRepository } from "../modules/members/repository.ts";
+import { memberCanRead } from "@envy/shared";
 import { AppError } from "./errors.ts";
 import { requireUser, type RequestContext } from "./request-context.ts";
 
@@ -20,6 +21,14 @@ export function environmentNotFound(): AppError {
     "ENVIRONMENT_NOT_FOUND",
     "There is no such environment, or you are not a member of its project.",
     404,
+  );
+}
+
+export function noEnvironmentAccess(environmentName: string): AppError {
+  return new AppError(
+    "NO_ENVIRONMENT_ACCESS",
+    `You have no access to ${environmentName}. Ask a project admin to give it to you.`,
+    403,
   );
 }
 
@@ -48,18 +57,26 @@ export function createAccessChecker(repositories: {
   ): Promise<MemberRole> {
     // Service tokens never act at project level; they only read their environment.
     const user = requireUser(context.actor);
-    const role = await repositories.members.findActiveRole(projectId, user.userId);
-    if (role === undefined) {
+    const membership = await repositories.members.findActiveMembership(projectId, user.userId);
+    if (membership === undefined) {
       throw notFound();
     }
-    if (ROLE_RANK[role] < ROLE_RANK[minimumRole]) {
+    if (ROLE_RANK[membership.role] < ROLE_RANK[minimumRole]) {
       throw forbidden(minimumRole);
     }
-    return role;
+    return membership.role;
+  }
+
+  /** The user's access list in the project (null: every environment). */
+  async function accessOf(context: RequestContext, projectId: string): Promise<string[] | null> {
+    const user = requireUser(context.actor);
+    const membership = await repositories.members.findActiveMembership(projectId, user.userId);
+    return membership?.access ?? null;
   }
 
   return {
     assertRole,
+    accessOf,
 
     /** Finds the environment and checks the caller's role in its project. */
     async assertEnvironmentRole(
@@ -86,6 +103,10 @@ export function createAccessChecker(repositories: {
         return environment;
       }
       await assertRole(context, environment.projectId, minimumRole, environmentNotFound);
+      // Without access the member has no key either; the server refuses too (ADR 0019).
+      if (!memberCanRead({ access: await accessOf(context, environment.projectId) }, environment)) {
+        throw noEnvironmentAccess(environment.name);
+      }
       return environment;
     },
   };

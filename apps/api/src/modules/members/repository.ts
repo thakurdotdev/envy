@@ -19,8 +19,12 @@ export type MemberWithUser = {
   email: string;
   name: string | null;
   publicKey: string | null;
+  /** Null: every environment. Otherwise the stage names they can read (ADR 0019). */
+  access: string[] | null;
   createdAt: Date;
 };
+
+export type MemberAccess = { userId: string; access: string[] | null };
 
 export function createMemberRepository(executor: Executor) {
   const memberWithUserColumns = {
@@ -33,6 +37,7 @@ export function createMemberRepository(executor: Executor) {
     email: users.email,
     name: users.name,
     publicKey: users.publicKey,
+    access: members.environmentAccess,
     createdAt: members.createdAt,
   };
 
@@ -46,23 +51,6 @@ export function createMemberRepository(executor: Executor) {
       await executor.insert(members).values(input);
     },
 
-    /** The user's role in a project that still exists, if they are an active member. */
-    async findActiveRole(projectId: string, userId: string): Promise<MemberRole | undefined> {
-      const [row] = await executor
-        .select({ role: members.role })
-        .from(members)
-        .innerJoin(projects, eq(projects.id, members.projectId))
-        .where(
-          and(
-            eq(members.projectId, projectId),
-            eq(members.userId, userId),
-            eq(members.status, "active"),
-            isNull(projects.deletedAt),
-          ),
-        );
-      return row?.role;
-    },
-
     async findMembership(
       projectId: string,
       userId: string,
@@ -74,12 +62,39 @@ export function createMemberRepository(executor: Executor) {
       return row;
     },
 
-    async listActiveUserIds(projectId: string): Promise<string[]> {
-      const rows = await executor
-        .select({ userId: members.userId })
+    /** Every active member with the environments they can read. */
+    async listActiveAccess(projectId: string): Promise<MemberAccess[]> {
+      return executor
+        .select({ userId: members.userId, access: members.environmentAccess })
         .from(members)
         .where(and(eq(members.projectId, projectId), eq(members.status, "active")));
-      return rows.map((row) => row.userId);
+    },
+
+    /** The user's role and access in a project that still exists, if they are active. */
+    async findActiveMembership(
+      projectId: string,
+      userId: string,
+    ): Promise<{ role: MemberRole; access: string[] | null } | undefined> {
+      const [row] = await executor
+        .select({ role: members.role, access: members.environmentAccess })
+        .from(members)
+        .innerJoin(projects, eq(projects.id, members.projectId))
+        .where(
+          and(
+            eq(members.projectId, projectId),
+            eq(members.userId, userId),
+            eq(members.status, "active"),
+            isNull(projects.deletedAt),
+          ),
+        );
+      return row;
+    },
+
+    async setAccess(memberId: string, access: string[] | null): Promise<void> {
+      await executor
+        .update(members)
+        .set({ environmentAccess: access })
+        .where(eq(members.id, memberId));
     },
 
     async listForProject(projectId: string): Promise<MemberWithUser[]> {
