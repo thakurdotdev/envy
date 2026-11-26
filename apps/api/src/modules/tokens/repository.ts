@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, arrayContains, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import type { Executor } from "../../db/executor.ts";
 import { environments, serviceTokens, type ServiceTokenRow } from "../../db/schema.ts";
 
@@ -14,6 +14,7 @@ export function createTokenRepository(executor: Executor) {
     async create(input: {
       projectId: string;
       environmentId: string;
+      layerEnvironmentIds: string[];
       name: string;
       tokenIdHash: string;
       publicKey: string;
@@ -45,19 +46,47 @@ export function createTokenRepository(executor: Executor) {
 
     async listForProject(projectId: string) {
       return executor
-        .select({ token: serviceTokens, environmentName: environments.name })
+        .select({
+          token: serviceTokens,
+          environmentName: environments.name,
+          environmentAppId: environments.appId,
+        })
         .from(serviceTokens)
         .innerJoin(environments, eq(environments.id, serviceTokens.environmentId))
         .where(eq(serviceTokens.projectId, projectId))
         .orderBy(desc(serviceTokens.id));
     },
 
-    /** Tokens that must get the new key when this environment's key is rotated. */
+    /**
+     * Tokens that must get the new key when this environment's key is
+     * rotated: those made for it, and those that read it as a layer.
+     */
     async listActiveForEnvironment(environmentId: string, now: Date): Promise<ServiceTokenRow[]> {
       return executor
         .select()
         .from(serviceTokens)
-        .where(and(eq(serviceTokens.environmentId, environmentId), isActive(now)));
+        .where(
+          and(
+            or(
+              eq(serviceTokens.environmentId, environmentId),
+              arrayContains(serviceTokens.layerEnvironmentIds, [environmentId]),
+            ),
+            isActive(now),
+          ),
+        );
+    },
+
+    /** Revokes every active token made for one of the app's environments, and returns them. */
+    async revokeForApp(appId: string, now: Date): Promise<Array<{ id: string; name: string }>> {
+      const appEnvironments = executor
+        .select({ id: environments.id })
+        .from(environments)
+        .where(eq(environments.appId, appId));
+      return executor
+        .update(serviceTokens)
+        .set({ revokedAt: now })
+        .where(and(inArray(serviceTokens.environmentId, appEnvironments), isActive(now)))
+        .returning({ id: serviceTokens.id, name: serviceTokens.name });
     },
 
     async revoke(tokenId: string, revokedAt: Date): Promise<void> {

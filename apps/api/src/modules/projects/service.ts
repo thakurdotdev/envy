@@ -62,6 +62,7 @@ export function createProjectService(dependencies: {
             const environment = await transaction.environments.create({
               id: input.environmentIds[starter.name],
               projectId: created.id,
+              appId: null,
               ...starter,
             });
             await transaction.environments.addWrappedKeys([

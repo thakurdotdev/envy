@@ -15,6 +15,7 @@
 | Phase 6 — Web dashboard                        | Done                                                  |
 | Phase 7 — CI tokens and polish                 | Done                                                  |
 | Phase 8 — Hardening and release                | Code done; deploy and first release pending           |
+| Phase 9 — Monorepo apps                        | In progress                                           |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
 
@@ -611,6 +612,22 @@ Not done (needs the owner):
 - [ ] Deploy the API and web through Shipyard, create the `envy` database for `appuser`, and set up the nightly backup cron (`docs/deploy.md`).
 - [ ] Set the `ENVY_API_URL` repository variable, make releases public, and tag `v0.1.0`.
 - [ ] Run the final check: a new user on a clean machine follows only the README.
+
+### Phase 9 — Monorepo apps
+
+Goal: one repo with many apps and packages, each with its own `.env`, managed from the root or from each app's folder (ADR 0018).
+
+- [x] ADR 0018: apps inside a project, three layers (shared → root stage → app stage), stages kept in sync
+- [x] API: `apps` table and module, app environments, app-aware environment list (`?apps=true`), new stages for every app at once
+- [x] API: all-or-nothing push to several environments; service tokens that read the layers under their environment
+- [ ] Shared: merge and separate any number of layers
+- [ ] CLI: `apps` in `.envy.json`, pick the app from the current folder, `--app`; pull, push, run, get, set, unset, history and rollback per app; root pull and push across every app
+- [ ] CLI: `envy apps ls|add|rm`, `envy env add` for every app, grants, removals and tokens that cover apps
+- [ ] CLI: `envy init` finds workspace folders and imports each one's files
+- [ ] Web: app picker on the project page, app environments in grants, removals and tokens, audit labels
+- [ ] End-to-end test against a sample monorepo; docs
+
+Done when: in a monorepo with `apps/api` and `apps/web`, `envy init` at the root links both, `envy pull` at the root writes each app's file, `cd apps/web && envy run -- <cmd>` gets shared, root and web values, and a token for `web/production` gives CI the same values.
 
 ## Testing, CI and release
 

@@ -10,6 +10,8 @@ export type AuditEvent = {
     | "project.created"
     | "project.renamed"
     | "project.deleted"
+    | "app.created"
+    | "app.removed"
     | "environment.created"
     | "environment.rotated"
     | "secrets.read"
@@ -21,7 +23,7 @@ export type AuditEvent = {
     | "member.removed"
     | "token.created"
     | "token.revoked";
-  targetType: "project" | "environment" | "member" | "token";
+  targetType: "project" | "app" | "environment" | "member" | "token";
   targetId: string;
   metadata?: Record<string, string | number | boolean | null>;
 };

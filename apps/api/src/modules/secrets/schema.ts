@@ -14,6 +14,21 @@ export const PushSecretsBody = t.Object(
   { additionalProperties: false },
 );
 
+// Several pushes saved together, or not at all (ADR 0018).
+export const PushManyBody = t.Object(
+  {
+    pushes: t.Array(
+      t.Composite([t.Object({ environmentId: t.String({ format: "uuid" }) }), PushSecretsBody], {
+        additionalProperties: false,
+      }),
+      { minItems: 1, maxItems: 100 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const ProjectIdParams = t.Object({ id: t.String({ format: "uuid" }) });
+
 export const EnvironmentIdParams = t.Object({ id: t.String({ format: "uuid" }) });
 
 export const SecretsQuery = t.Object({

@@ -2,18 +2,26 @@ import { isUniqueViolation } from "../../db/executor.ts";
 import type { EnvironmentRow } from "../../db/schema.ts";
 import { projectNotFound, type AccessChecker } from "../../lib/access.ts";
 import type { Clock } from "../../lib/clock.ts";
-import { assertBase64UrlBytes, BYTE_SIZES } from "../../lib/base64url.ts";
 import { AppError } from "../../lib/errors.ts";
 import { requireUser, actorId, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
+import {
+  assertKeysForEveryActiveMember,
+  assertOneForEachApp,
+  assertWrappedKeySizes,
+  toWrappedKeyRows,
+  type WrappedKeyForMember,
+} from "./key-rules.ts";
 import { applyRotation, type EnvironmentRotation } from "./rotation.ts";
 
 export type CreateEnvironmentInput = {
   id: string;
   name: string;
   isProtected?: boolean | undefined;
-  wrappedKeys: Array<{ userId: string; wrappedKey: string }>;
+  wrappedKeys: WrappedKeyForMember[];
+  appEnvironments?:
+    Array<{ appId: string; id: string; wrappedKeys: WrappedKeyForMember[] }> | undefined;
 };
 
 export function createEnvironmentService(dependencies: {
@@ -25,10 +33,8 @@ export function createEnvironmentService(dependencies: {
   const { repositories, runInTransaction, access, clock } = dependencies;
 
   return {
-    async listEnvironments(context: RequestContext, projectId: string) {
+    async listEnvironments(context: RequestContext, projectId: string, includeApps: boolean) {
       const actor = context.actor;
-      // A service token may list its own project, and sees only its environment.
-      const onlyEnvironmentId = actor.type === "token" ? actor.environmentId : undefined;
       if (actor.type === "token") {
         if (actor.projectId !== projectId) {
           throw projectNotFound();
@@ -36,54 +42,78 @@ export function createEnvironmentService(dependencies: {
       } else {
         await access.assertRole(context, projectId, "viewer");
       }
-      const rows = (await repositories.environments.listForProject(projectId)).filter(
-        (row) => onlyEnvironmentId === undefined || row.id === onlyEnvironmentId,
-      );
+      const all = await repositories.environments.listForProject(projectId);
+      // A service token sees only its environment and the layers under it.
+      const rows =
+        actor.type === "token"
+          ? all.filter(
+              (row) => row.id === actor.environmentId || actor.layerEnvironmentIds.includes(row.id),
+            )
+          : all.filter((row) => includeApps || row.appId === null);
       return {
         items: rows.map((row) => ({ ...toEnvironmentDto(row), latestVersion: row.latestVersion })),
       };
     },
 
+    /**
+     * Adds a root environment, and the same stage for every app in the same
+     * transaction, so all apps keep the same stages (ADR 0018).
+     */
     async createEnvironment(
       context: RequestContext,
       projectId: string,
       input: CreateEnvironmentInput,
     ) {
       await access.assertRole(context, projectId, "admin");
-      for (const [index, recipient] of input.wrappedKeys.entries()) {
-        assertBase64UrlBytes(
-          recipient.wrappedKey,
-          BYTE_SIZES.wrappedEnvKey,
-          `wrappedKeys.${index}.wrappedKey`,
-        );
+      const appEnvironments = input.appEnvironments ?? [];
+      assertWrappedKeySizes(input.wrappedKeys, "wrappedKeys");
+      for (const [index, appEnvironment] of appEnvironments.entries()) {
+        assertWrappedKeySizes(appEnvironment.wrappedKeys, `appEnvironments.${index}.wrappedKeys`);
       }
+      const createdBy = requireUser(context.actor).userId;
       try {
         const environment = await runInTransaction(async (transaction) => {
           await transaction.projects.lockForKeyChange(projectId);
+          await assertOneForEachApp(transaction, projectId, appEnvironments);
           await assertKeysForEveryActiveMember(transaction, projectId, input.wrappedKeys);
+          for (const appEnvironment of appEnvironments) {
+            await assertKeysForEveryActiveMember(
+              transaction,
+              projectId,
+              appEnvironment.wrappedKeys,
+            );
+          }
+          const isProtected = input.isProtected ?? false;
           const created = await transaction.environments.create({
             id: input.id,
             projectId,
+            appId: null,
             name: input.name,
             isShared: false,
-            isProtected: input.isProtected ?? false,
+            isProtected,
           });
-          await transaction.environments.addWrappedKeys(
-            input.wrappedKeys.map((recipient) => ({
-              environmentId: created.id,
-              keyVersion: created.currentKeyVersion,
-              recipientType: "user" as const,
-              recipientId: recipient.userId,
-              wrappedKey: recipient.wrappedKey,
-              createdBy: requireUser(context.actor).userId,
+          await transaction.environments.createMany(
+            appEnvironments.map((appEnvironment) => ({
+              id: appEnvironment.id,
+              projectId,
+              appId: appEnvironment.appId,
+              name: input.name,
+              isShared: false,
+              isProtected,
             })),
           );
+          await transaction.environments.addWrappedKeys([
+            ...toWrappedKeyRows(created.id, input.wrappedKeys, createdBy),
+            ...appEnvironments.flatMap((appEnvironment) =>
+              toWrappedKeyRows(appEnvironment.id, appEnvironment.wrappedKeys, createdBy),
+            ),
+          ]);
           await recordAuditEvent(transaction.audit, context, {
             projectId,
             action: "environment.created",
             targetType: "environment",
             targetId: created.id,
-            metadata: { name: created.name },
+            metadata: { name: created.name, apps: appEnvironments.length },
           });
           return created;
         });
@@ -150,32 +180,11 @@ export function createEnvironmentService(dependencies: {
   };
 }
 
-// A member without a wrapped key could not read the new environment, and a
-// key for a non-member would leak access. So the list must match exactly.
-async function assertKeysForEveryActiveMember(
-  repositories: Repositories,
-  projectId: string,
-  wrappedKeys: Array<{ userId: string }>,
-): Promise<void> {
-  const memberIds = new Set(await repositories.members.listActiveUserIds(projectId));
-  const recipientIds = new Set(wrappedKeys.map((recipient) => recipient.userId));
-  const matches =
-    recipientIds.size === wrappedKeys.length &&
-    recipientIds.size === memberIds.size &&
-    [...recipientIds].every((userId) => memberIds.has(userId));
-  if (!matches) {
-    throw new AppError(
-      "RECIPIENTS_MISMATCH",
-      "Wrap the environment key exactly once for every active member of the project.",
-      400,
-    );
-  }
-}
-
 export function toEnvironmentDto(environment: EnvironmentRow) {
   return {
     id: environment.id,
     projectId: environment.projectId,
+    appId: environment.appId,
     name: environment.name,
     isShared: environment.isShared,
     isProtected: environment.isProtected,

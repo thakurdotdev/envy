@@ -2,7 +2,13 @@ import type { RateLimiter } from "../../lib/rate-limit.ts";
 import { Elysia } from "elysia";
 import { authGuard, type Authenticate } from "../../lib/auth-guard.ts";
 import { RotationSchema } from "../members/schema.ts";
-import { CreateEnvironmentBody, EnvironmentIdParams, KeyQuery, ProjectIdParams } from "./schema.ts";
+import {
+  CreateEnvironmentBody,
+  EnvironmentIdParams,
+  KeyQuery,
+  ListEnvironmentsQuery,
+  ProjectIdParams,
+} from "./schema.ts";
 import { t } from "elysia";
 import type { EnvironmentService } from "./service.ts";
 
@@ -17,8 +23,9 @@ export function environmentRoutes(dependencies: {
     .use(authGuard(authenticate, trustedProxies, writeLimiter))
     .get(
       "/v1/projects/:id/environments",
-      ({ context, params }) => environments.listEnvironments(context, params.id),
-      { params: ProjectIdParams },
+      ({ context, params, query }) =>
+        environments.listEnvironments(context, params.id, query.apps === "true"),
+      { params: ProjectIdParams, query: ListEnvironmentsQuery },
     )
     .post(
       "/v1/projects/:id/environments",

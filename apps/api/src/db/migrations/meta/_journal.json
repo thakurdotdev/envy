@@ -36,6 +36,13 @@
       "when": 1795361577499,
       "tag": "0004_refresh_token_reuse",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795693170520,
+      "tag": "0005_apps",
+      "breakpoints": true
     }
   ]
 }

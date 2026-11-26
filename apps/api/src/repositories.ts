@@ -1,5 +1,6 @@
 import type { Database } from "./db/client.ts";
 import type { Executor } from "./db/executor.ts";
+import { createAppRepository } from "./modules/apps/repository.ts";
 import { createAuditRepository } from "./modules/audit/repository.ts";
 import { createEnvironmentRepository } from "./modules/environments/repository.ts";
 import { createMemberRepository } from "./modules/members/repository.ts";
@@ -11,6 +12,7 @@ import { createUserRepository } from "./modules/users/repository.ts";
 /** The repositories that services share, all running on the same executor. */
 export function createRepositories(executor: Executor) {
   return {
+    apps: createAppRepository(executor),
     audit: createAuditRepository(executor),
     environments: createEnvironmentRepository(executor),
     members: createMemberRepository(executor),

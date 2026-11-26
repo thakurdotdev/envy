@@ -135,6 +135,20 @@ export async function pushSecretsAsClient(
   secrets: Secrets,
   baseVersion: number,
 ) {
+  return testApp.request("POST", `/v1/environments/${place.environmentId}/secrets`, {
+    accessToken: user.accessToken,
+    body: await encryptPushAsClient(testApp, user, place, secrets, baseVersion),
+  });
+}
+
+/** The body of one push: the secrets encrypted for `baseVersion + 1` with the current key. */
+export async function encryptPushAsClient(
+  testApp: TestApp,
+  user: TestUser,
+  place: { projectId: string; environmentId: string },
+  secrets: Secrets,
+  baseVersion: number,
+) {
   const keyResponse = await testApp.request("GET", `/v1/environments/${place.environmentId}/key`, {
     accessToken: user.accessToken,
   });
@@ -145,15 +159,12 @@ export async function pushSecretsAsClient(
     version: baseVersion + 1,
     keyVersion,
   });
-  return testApp.request("POST", `/v1/environments/${place.environmentId}/secrets`, {
-    accessToken: user.accessToken,
-    body: {
-      baseVersion,
-      keyVersion,
-      ciphertext: await toBase64Url(encrypted.ciphertext),
-      nonce: await toBase64Url(encrypted.nonce),
-    },
-  });
+  return {
+    baseVersion,
+    keyVersion,
+    ciphertext: await toBase64Url(encrypted.ciphertext),
+    nonce: await toBase64Url(encrypted.nonce),
+  };
 }
 
 export async function pullSecretsAsClient(
@@ -231,6 +242,7 @@ export async function listMembers(testApp: TestApp, user: TestUser, projectId: s
 
 type EnvironmentInfo = {
   id: string;
+  appId: string | null;
   name: string;
   currentKeyVersion: number;
   latestVersion: number;
@@ -241,11 +253,17 @@ export async function listEnvironmentInfo(
   user: TestUser,
   projectId: string,
 ): Promise<EnvironmentInfo[]> {
-  const response = await testApp.request("GET", `/v1/projects/${projectId}/environments`, {
-    accessToken: user.accessToken,
-  });
+  // App environments too: grants and rotations must cover them (ADR 0018).
+  const response = await testApp.request(
+    "GET",
+    `/v1/projects/${projectId}/environments?apps=true`,
+    {
+      accessToken: user.accessToken,
+    },
+  );
   return readItems(response.body).map((item) => ({
     id: readField(item, "id"),
+    appId: readObject(item, "appId") === null ? null : readField(item, "appId"),
     name: readField(item, "name"),
     currentKeyVersion: readNumber(item, "currentKeyVersion"),
     latestVersion: readNumber(item, "latestVersion"),
@@ -343,6 +361,8 @@ export async function createTokenAsClient(
   admin: TestUser,
   place: { projectId: string; environmentId: string },
   name: string,
+  /** Environments under this one the token should read too (ADR 0018). */
+  layerEnvironmentIds?: string[],
 ) {
   const tokenId = randomBytes(24).toString("hex");
   const tokenKeys = await generateUserKeys();
@@ -362,12 +382,43 @@ export async function createTokenAsClient(
         environmentId: place.environmentId,
         keyVersion,
       }),
+      ...(layerEnvironmentIds === undefined
+        ? {}
+        : {
+            layerWrappedKeys: await wrapLayersForToken(
+              testApp,
+              admin,
+              tokenKeys.publicKey,
+              layerEnvironmentIds,
+            ),
+          }),
     },
   });
   return {
     status: response.status,
-    id: readField(response.body, "id"),
+    id: response.status === 201 ? readField(response.body, "id") : "",
     bearer: `Bearer envy_${tokenId}`,
     keys: tokenKeys,
   };
+}
+
+async function wrapLayersForToken(
+  testApp: TestApp,
+  admin: TestUser,
+  tokenPublicKey: Uint8Array,
+  environmentIds: string[],
+) {
+  const wrapped = [];
+  for (const environmentId of environmentIds) {
+    const keyResponse = await testApp.request("GET", `/v1/environments/${environmentId}/key`, {
+      accessToken: admin.accessToken,
+    });
+    const keyVersion = readNumber(keyResponse.body, "keyVersion");
+    const envKey = await fetchEnvKey(testApp, admin, environmentId, keyVersion);
+    wrapped.push({
+      environmentId,
+      wrappedKey: await wrapAsClient(envKey, admin, tokenPublicKey, { environmentId, keyVersion }),
+    });
+  }
+  return wrapped;
 }

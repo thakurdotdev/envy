@@ -6,6 +6,8 @@ import { AppError } from "../../lib/errors.ts";
 import { requireUser, type RequestContext } from "../../lib/request-context.ts";
 import type { Repositories, RunInTransaction } from "../../repositories.ts";
 import { recordAuditEvent } from "../audit/service.ts";
+import { layersUnder } from "../environments/layers.ts";
+import { chooseLayers, toTokenEnvironment } from "./layers.ts";
 import type { TokenActor } from "../auth/service.ts";
 
 // A service token is `envy_<tokenId>_<privateKey>`, made on the client. Only
@@ -38,6 +40,7 @@ export type CreateTokenInput = {
   tokenIdHash: string;
   publicKey: string;
   wrappedKey: string;
+  layerWrappedKeys?: Array<{ environmentId: string; wrappedKey: string }> | undefined;
   expiresAt?: string | undefined;
 };
 
@@ -69,6 +72,7 @@ export function createTokenService(dependencies: {
         tokenId: token.id,
         projectId: token.projectId,
         environmentId: token.environmentId,
+        layerEnvironmentIds: token.layerEnvironmentIds,
       };
     },
 
@@ -79,6 +83,7 @@ export function createTokenService(dependencies: {
       if (environment === undefined || environment.projectId !== projectId) {
         throw environmentNotFound();
       }
+      const layers = await chooseLayers(repositories, environment, input.layerWrappedKeys);
       if (!TOKEN_ID_HASH_PATTERN.test(input.tokenIdHash)) {
         throw new AppError(
           "VALIDATION_FAILED",
@@ -88,6 +93,13 @@ export function createTokenService(dependencies: {
       }
       assertBase64UrlBytes(input.publicKey, BYTE_SIZES.publicKey, "publicKey");
       assertBase64UrlBytes(input.wrappedKey, BYTE_SIZES.wrappedEnvKey, "wrappedKey");
+      for (const layer of input.layerWrappedKeys ?? []) {
+        assertBase64UrlBytes(
+          layer.wrappedKey,
+          BYTE_SIZES.wrappedEnvKey,
+          "layerWrappedKeys.wrappedKey",
+        );
+      }
       const expiresAt = input.expiresAt === undefined ? null : new Date(input.expiresAt);
       if (expiresAt !== null && (Number.isNaN(expiresAt.getTime()) || expiresAt <= clock.now())) {
         throw new AppError(
@@ -101,6 +113,7 @@ export function createTokenService(dependencies: {
         const created = await transaction.tokens.create({
           projectId,
           environmentId: environment.id,
+          layerEnvironmentIds: layers.map((layer) => layer.id),
           name: input.name,
           tokenIdHash: input.tokenIdHash,
           publicKey: input.publicKey,
@@ -116,6 +129,14 @@ export function createTokenService(dependencies: {
             wrappedKey: input.wrappedKey,
             createdBy: user.userId,
           },
+          ...layers.map((layer) => ({
+            environmentId: layer.id,
+            keyVersion: layer.currentKeyVersion,
+            recipientType: "token" as const,
+            recipientId: created.id,
+            wrappedKey: layer.wrappedKey,
+            createdBy: user.userId,
+          })),
         ]);
         await recordAuditEvent(transaction.audit, context, {
           projectId,
@@ -136,6 +157,7 @@ export function createTokenService(dependencies: {
         items: rows.map((row) => ({
           ...toTokenDto(row.token),
           environmentName: row.environmentName,
+          environmentAppId: row.environmentAppId,
         })),
       };
     },
@@ -169,16 +191,14 @@ export function createTokenService(dependencies: {
       if (environment === undefined) {
         throw tokenNotFound();
       }
+      // Lowest first, and only those this token holds a key for.
+      const layers = layersUnder(environment, environments).filter((layer) =>
+        actor.layerEnvironmentIds.includes(layer.id),
+      );
       return {
         projectId: actor.projectId,
-        environment: {
-          id: environment.id,
-          name: environment.name,
-          isShared: environment.isShared,
-          isProtected: environment.isProtected,
-          currentKeyVersion: environment.currentKeyVersion,
-          latestVersion: environment.latestVersion,
-        },
+        environment: toTokenEnvironment(environment),
+        layers: layers.map(toTokenEnvironment),
       };
     },
   };
@@ -188,6 +208,7 @@ function toTokenDto(token: {
   id: string;
   name: string;
   environmentId: string;
+  layerEnvironmentIds: string[];
   publicKey: string;
   createdAt: Date;
   lastUsedAt: Date | null;
@@ -198,6 +219,7 @@ function toTokenDto(token: {
     id: token.id,
     name: token.name,
     environmentId: token.environmentId,
+    layerEnvironmentIds: token.layerEnvironmentIds,
     publicKey: token.publicKey,
     createdAt: token.createdAt.toISOString(),
     lastUsedAt: token.lastUsedAt?.toISOString() ?? null,

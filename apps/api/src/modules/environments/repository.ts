@@ -1,6 +1,7 @@
-import { and, asc, eq, isNull, max } from "drizzle-orm";
+import { and, asc, eq, isNull, max, or } from "drizzle-orm";
 import type { Executor } from "../../db/executor.ts";
 import {
+  apps,
   environmentKeys,
   environments,
   projects,
@@ -13,10 +14,15 @@ export type NewEnvironment = {
   /** Chosen by the client, so wrapped keys can be bound to it before it exists (ADR 0016). */
   id: string;
   projectId: string;
+  /** Null for a root environment. */
+  appId: string | null;
   name: string;
   isShared: boolean;
   isProtected: boolean;
 };
+
+// A root environment, or one whose app has not been removed (ADR 0018).
+const appIsLive = or(isNull(environments.appId), isNull(apps.deletedAt));
 
 export type NewWrappedKey = {
   environmentId: string;
@@ -43,23 +49,35 @@ export function createEnvironmentRepository(executor: Executor) {
       return environment;
     },
 
-    /** An environment whose project still exists. */
+    async createMany(inputs: NewEnvironment[]): Promise<EnvironmentRow[]> {
+      if (inputs.length === 0) {
+        return [];
+      }
+      return executor.insert(environments).values(inputs).returning();
+    },
+
+    /** An environment whose project (and app, if it has one) still exists. */
     async findById(environmentId: string): Promise<EnvironmentRow | undefined> {
       const [row] = await executor
         .select({ environment: environments })
         .from(environments)
         .innerJoin(projects, eq(projects.id, environments.projectId))
-        .where(and(eq(environments.id, environmentId), isNull(projects.deletedAt)));
+        .leftJoin(apps, eq(apps.id, environments.appId))
+        .where(and(eq(environments.id, environmentId), isNull(projects.deletedAt), appIsLive));
       return row?.environment;
     },
 
-    /** Every environment of a project, with its newest secret version (0 if none). */
+    /**
+     * Every environment of a project, root and app ones (not those of removed
+     * apps), with its newest secret version (0 if none).
+     */
     async listForProject(projectId: string) {
       const rows = await executor
         .select({ environment: environments, latestVersion: max(secretVersions.version) })
         .from(environments)
+        .leftJoin(apps, eq(apps.id, environments.appId))
         .leftJoin(secretVersions, eq(secretVersions.environmentId, environments.id))
-        .where(eq(environments.projectId, projectId))
+        .where(and(eq(environments.projectId, projectId), appIsLive))
         .groupBy(environments.id)
         // UUIDv7 ids follow creation order, even within one transaction.
         .orderBy(asc(environments.id));
