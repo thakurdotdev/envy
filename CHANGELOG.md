@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-26)
 
 Monorepos (ADR 0018). **Run `envy upgrade`:** older CLIs cannot grant or remove members, or add environments, in a project that has apps.
 
