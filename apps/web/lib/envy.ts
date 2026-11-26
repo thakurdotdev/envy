@@ -19,7 +19,7 @@ import {
   type KdfParams,
   type Secrets,
 } from "@envy/crypto";
-import { layersUnder, newUuidV7s, ROOT_APP_NAME } from "@envy/shared";
+import { layersUnder, memberCanRead, newUuidV7s, ROOT_APP_NAME } from "@envy/shared";
 import { ApiError, call } from "./api";
 import {
   checkNotRolledBack,
@@ -355,13 +355,19 @@ export type Member = {
   role: string;
   status: "pending" | "active";
   publicKey: string | null;
+  /** Null: every environment. Otherwise the stages they can read (ADR 0019). */
+  access: string[] | null;
 };
 
-/** Wraps every environment key for a pending member, then activates them. */
+/**
+ * Wraps the key of every environment the member may read for a pending
+ * member, then activates them. `access` (ADR 0019) sets which stages first.
+ */
 export async function grantMember(
   keys: UnlockedKeys,
   projectId: string,
   member: Member,
+  access?: string[] | null,
 ): Promise<void> {
   if (member.publicKey === null) {
     throw new ApiError("KEYS_NOT_SET", `@${member.githubLogin} has not set up their keys yet.`);
@@ -369,7 +375,10 @@ export async function grantMember(
   // The grant dialog had the admin check this fingerprint, so pin it now.
   await pinConfirmedPublicKeys(keys.trust, projectId, memberKeyOwner(member));
   const wrappedKeys: Array<{ environmentId: string; keyVersion: number; wrappedKey: string }> = [];
-  for (const environment of await listEnvironments(projectId)) {
+  const readable = (await listEnvironments(projectId)).filter((environment) =>
+    memberCanRead({ access: access === undefined ? member.access : access }, environment),
+  );
+  for (const environment of readable) {
     const keyVersion = environment.currentKeyVersion;
     const envKey = await getEnvKey(keys, projectId, environment, keyVersion);
     wrappedKeys.push({
@@ -382,7 +391,11 @@ export async function grantMember(
     });
     await clearKey(envKey);
   }
-  await call((api) => api.v1.members({ id: member.id }).grant.post({ wrappedKeys }));
+  await call((api) =>
+    api.v1
+      .members({ id: member.id })
+      .grant.post({ wrappedKeys, ...(access === undefined ? {} : { access }) }),
+  );
 }
 
 type Rotation = {
@@ -420,23 +433,43 @@ export async function removeMember(
     ...activeTokens.map(tokenKeyOwner),
   ]);
   const rotations: Rotation[] = [];
+  // Only what the member could read needs a new key (ADR 0019).
   for (const environment of await listEnvironments(projectId)) {
-    const newKeyVersion = environment.currentKeyVersion + 1;
-    const newEnvKey = await generateEnvKey();
+    if (memberCanRead(member, environment)) {
+      const readers = staying.filter((candidate) => memberCanRead(candidate, environment));
+      rotations.push(await buildRotation(keys, projectId, environment, readers, activeTokens));
+    }
+  }
+  // The answer lists the service tokens this member made, which were revoked with them.
+  return call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
+}
+
+/**
+ * A new key for one environment, wrapped for `readers` and for every active
+ * token that reads it, with the latest secrets encrypted again under it.
+ */
+export async function buildRotation(
+  keys: UnlockedKeys,
+  projectId: string,
+  environment: EnvironmentSummary,
+  readers: Member[],
+  activeTokens: Awaited<ReturnType<typeof listActiveTokens>>,
+): Promise<Rotation> {
+  const newKeyVersion = environment.currentKeyVersion + 1;
+  const place = { environmentId: environment.id, keyVersion: newKeyVersion };
+  const newEnvKey = await generateEnvKey();
+  try {
     const wrappedKeys: Rotation["wrappedKeys"] = [];
-    for (const recipient of staying) {
+    for (const recipient of readers) {
       if (recipient.publicKey !== null) {
         wrappedKeys.push({
           userId: recipient.userId,
-          wrappedKey: await wrapFor(newEnvKey, keys, recipient.publicKey, {
-            environmentId: environment.id,
-            keyVersion: newKeyVersion,
-          }),
+          wrappedKey: await wrapFor(newEnvKey, keys, recipient.publicKey, place),
         });
       }
     }
-    // Service tokens that read this environment (as theirs or as a layer
-    // under it, ADR 0018) get the new key too, so CI keeps working.
+    // Tokens that read this environment (as theirs or as a layer under it,
+    // ADR 0018) get the new key too, so CI keeps working.
     const tokenWrappedKeys: Rotation["tokenWrappedKeys"] = [];
     for (const token of activeTokens.filter(
       (candidate) =>
@@ -445,10 +478,7 @@ export async function removeMember(
     )) {
       tokenWrappedKeys.push({
         tokenId: token.id,
-        wrappedKey: await wrapFor(newEnvKey, keys, token.publicKey, {
-          environmentId: environment.id,
-          keyVersion: newKeyVersion,
-        }),
+        wrappedKey: await wrapFor(newEnvKey, keys, token.publicKey, place),
       });
     }
     const latest = await pullEnvironment(keys, projectId, environment);
@@ -469,11 +499,72 @@ export async function removeMember(
       rotation.ciphertext = await toBase64Url(encrypted.ciphertext);
       rotation.nonce = await toBase64Url(encrypted.nonce);
     }
-    rotations.push(rotation);
+    return rotation;
+  } finally {
     await clearKey(newEnvKey);
   }
-  // The answer lists the service tokens this member made, which were revoked with them.
-  return call((api) => api.v1.members({ id: member.id }).delete({ rotations }));
+}
+
+/**
+ * Changes which environments a member can read (ADR 0019): keys for what
+ * they gain, and a new key for what they lose, wrapped for everyone who
+ * keeps it.
+ */
+export async function changeMemberAccess(
+  keys: UnlockedKeys,
+  projectId: string,
+  member: Member,
+  everyone: Member[],
+  access: string[] | null,
+): Promise<{ gained: number; lost: number }> {
+  if (member.publicKey === null) {
+    throw new ApiError("KEYS_NOT_SET", `@${member.githubLogin} has not set up their keys yet.`);
+  }
+  const environments = await listEnvironments(projectId);
+  const isActive = member.status === "active";
+  const before = environments.filter(
+    (environment) => isActive && memberCanRead(member, environment),
+  );
+  const after = environments.filter(
+    (environment) => isActive && memberCanRead({ access }, environment),
+  );
+  const gained = after.filter((environment) => !before.includes(environment));
+  const lost = before.filter((environment) => !after.includes(environment));
+
+  const wrappedKeys: Array<{ environmentId: string; keyVersion: number; wrappedKey: string }> = [];
+  for (const environment of gained) {
+    const keyVersion = environment.currentKeyVersion;
+    const envKey = await getEnvKey(keys, projectId, environment, keyVersion);
+    wrappedKeys.push({
+      environmentId: environment.id,
+      keyVersion,
+      wrappedKey: await wrapFor(envKey, keys, member.publicKey, {
+        environmentId: environment.id,
+        keyVersion,
+      }),
+    });
+    await clearKey(envKey);
+  }
+  const rotations: Rotation[] = [];
+  if (lost.length > 0) {
+    const others = everyone.filter(
+      (candidate) => candidate.id !== member.id && candidate.status === "active",
+    );
+    const activeTokens = await listActiveTokens(projectId);
+    // New keys go only to keys this browser trusts.
+    await trustRecipients(keys.trust, keys, projectId, [
+      ...others.flatMap(memberKeyOwner),
+      ...activeTokens.map(tokenKeyOwner),
+    ]);
+    for (const environment of lost) {
+      const readers = others.filter((candidate) => memberCanRead(candidate, environment));
+      rotations.push(await buildRotation(keys, projectId, environment, readers, activeTokens));
+    }
+  }
+  await call((api) =>
+    api.v1.members({ id: member.id }).access.put({ access, wrappedKeys, rotations }),
+  );
+  return { gained: gained.length, lost: lost.length };
 }
 
 export function diffKeys(before: Secrets, after: Secrets) {

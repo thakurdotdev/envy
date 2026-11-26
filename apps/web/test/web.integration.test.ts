@@ -349,6 +349,58 @@ describe("project settings", () => {
   }, 120_000);
 });
 
+describe("access per environment (ADR 0019)", () => {
+  test("the owner gives a new member development only from the members page", async () => {
+    const ownerHome = join(workspace, "home");
+    const repo = join(workspace, "mono");
+    const contractorHome = join(workspace, "contractor-home");
+    const contractorRepo = join(workspace, "contractor-repo");
+    await mkdir(contractorHome);
+    await mkdir(contractorRepo);
+    await writeFile(
+      join(contractorRepo, ".envy.json"),
+      await Bun.file(join(repo, ".envy.json")).text(),
+    );
+    expect((await runEnvy(["set", "STAGE=dev"], repo, ownerHome)).exitCode).toBe(0);
+    const invite = await runEnvy(
+      ["members", "invite", "contractor@example.invalid"],
+      repo,
+      ownerHome,
+    );
+    testApp.github.autoApproveDevices(makeGitHubUser("contractor"));
+    expect((await runEnvy(["login"], contractorRepo, contractorHome)).exitCode).toBe(0);
+    const accepted = await runEnvy(
+      ["accept", invite.stdout.trim()],
+      contractorRepo,
+      contractorHome,
+    );
+    expect(accepted.exitCode).toBe(0);
+
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${webServer.port}/projects`);
+    await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+    await unlock(page);
+    await page.getByRole("link", { name: /Mono Web/ }).click();
+    const projectNav = page.getByRole("navigation", { name: "Project" });
+    await projectNav.getByRole("link", { name: "Members" }).click();
+    await page.getByRole("button", { name: "Give access" }).click();
+    await page.getByLabel("Every environment, including new ones").uncheck();
+    await page.getByLabel("development").check();
+    await page.getByRole("button", { name: "It matches, give access" }).click();
+    await page.getByRole("row", { name: /@contractor.*development/ }).waitFor();
+    await page.close();
+
+    const development = await runEnvy(["get", "STAGE"], contractorRepo, contractorHome);
+    expect(development.stdout).toBe("dev\n");
+    const production = await runEnvy(
+      ["get", "STAGE", "--env", "production", "--yes"],
+      contractorRepo,
+      contractorHome,
+    );
+    expect(production.exitCode).toBe(1);
+  }, 120_000);
+});
+
 // Playwright's own `expect` is not used, so this small bridge waits for
 // visibility and values with bun:test assertions.
 function expectLocator(locator: ReturnType<Page["getByTestId"]>) {

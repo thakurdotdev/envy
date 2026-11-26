@@ -47,7 +47,14 @@ import {
 } from "@/components/ui/table";
 import { forgetCached, useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
-import { grantMember, removeMember, type Member } from "@/lib/envy";
+import {
+  changeMemberAccess,
+  grantMember,
+  listEnvironments,
+  removeMember,
+  type Member,
+} from "@/lib/envy";
+import { AccessPicker, describeAccess } from "@/components/access-picker";
 import { checkListedPublicKeys, memberKeyOwner } from "@/lib/trust";
 import { useUnlocked } from "@/lib/session";
 
@@ -76,10 +83,17 @@ function Members({ project }: { project: ProjectInfo }) {
   const { profile, keys } = useUnlocked();
   const { state, reload } = useLoad(
     async () => {
-      const members = await call((api) => api.v1.projects({ id: project.id }).members.get());
+      const [members, environments] = await Promise.all([
+        call((api) => api.v1.projects({ id: project.id }).members.get()),
+        listEnvironments(project.id),
+      ]);
       // Refuses a key that changed since this browser last saw it.
       await checkListedPublicKeys(keys.trust, project.id, members.items.flatMap(memberKeyOwner));
-      return members;
+      // The stages a member's access can name (ADR 0019).
+      const stages = environments
+        .filter((environment) => environment.appId === null && !environment.isShared)
+        .map((environment) => environment.name);
+      return { items: members.items, stages };
     },
     [project.id],
     { cacheKey: `members:${project.id}` },
@@ -116,6 +130,7 @@ function Members({ project }: { project: ProjectInfo }) {
               <TableRow>
                 <TableHead>Member</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead className="hidden sm:table-cell">Access</TableHead>
                 <TableHead className="hidden md:table-cell">Key fingerprint</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
@@ -128,6 +143,7 @@ function Members({ project }: { project: ProjectInfo }) {
                   key={member.id}
                   member={member}
                   everyone={members}
+                  stages={state.data.stages}
                   projectId={project.id}
                   isYou={member.userId === profile.id}
                   canManage={isAdmin && member.role !== "owner"}
@@ -158,6 +174,7 @@ function useFingerprint(publicKey: string | null): string {
 function MemberRow({
   member,
   everyone,
+  stages,
   projectId,
   isYou,
   canManage,
@@ -165,6 +182,7 @@ function MemberRow({
 }: {
   member: Member;
   everyone: Member[];
+  stages: string[];
   projectId: string;
   isYou: boolean;
   canManage: boolean;
@@ -172,7 +190,11 @@ function MemberRow({
 }) {
   const { keys } = useUnlocked();
   const code = useFingerprint(member.publicKey);
-  const [confirm, setConfirm] = useState<"grant" | "remove" | undefined>();
+  const [confirm, setConfirm] = useState<"grant" | "remove" | "access" | undefined>();
+  // The access being chosen in the grant or access dialog.
+  const [access, setAccess] = useState<string[] | null>(member.access);
+  // Admins and owners always have every environment (ADR 0019).
+  const canLimit = canManage && (member.role === "member" || member.role === "viewer");
   const [busy, setBusy] = useState(false);
   const who = `@${member.githubLogin}`;
 
@@ -203,8 +225,20 @@ function MemberRow({
 
   const grant = () =>
     run(async () => {
-      await grantMember(keys, projectId, member);
-      toast.success(`${who} can now read every environment`);
+      await grantMember(keys, projectId, member, canLimit ? access : undefined);
+      toast.success(
+        `${who} can now read ${access === null ? "every environment" : `shared and ${describeAccess(access)}`}`,
+      );
+    });
+  const saveAccess = () =>
+    run(async () => {
+      const { lost } = await changeMemberAccess(keys, projectId, member, everyone, access);
+      toast.success(`${who} can now read: ${describeAccess(access)}`, {
+        description:
+          lost > 0
+            ? "The environments they lost have new keys. Change real credentials they may have copied."
+            : undefined,
+      });
     });
   const remove = () =>
     run(async () => {
@@ -260,13 +294,40 @@ function MemberRow({
           ) : null}
         </div>
       </TableCell>
+      <TableCell className="hidden text-sm sm:table-cell">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={member.access === null ? "text-muted-foreground" : "font-mono"}>
+            {describeAccess(member.access)}
+          </span>
+          {canLimit && member.status === "active" ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setAccess(member.access);
+                setConfirm("access");
+              }}
+            >
+              Change
+            </Button>
+          ) : null}
+        </div>
+      </TableCell>
       <TableCell className="hidden font-mono text-sm tracking-wide whitespace-nowrap text-muted-foreground md:table-cell">
         {code}
       </TableCell>
       <TableCell>
         <div className="flex justify-end gap-2">
           {canManage && member.status === "pending" ? (
-            <Button size="sm" disabled={busy} onClick={() => setConfirm("grant")}>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setAccess(member.access);
+                setConfirm("grant");
+              }}
+            >
               Give access
             </Button>
           ) : null}
@@ -290,7 +351,11 @@ function MemberRow({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirm === "grant" ? `Give ${who} access?` : `Remove ${who}?`}
+              {confirm === "grant"
+                ? `Give ${who} access?`
+                : confirm === "access"
+                  ? `What can ${who} read?`
+                  : `Remove ${who}?`}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               {confirm === "grant" ? (
@@ -304,11 +369,16 @@ function MemberRow({
                   </p>
                   <p>If it is different, do not continue: someone may have swapped their key.</p>
                 </div>
+              ) : confirm === "access" ? (
+                <p>
+                  They get the keys of what you add. What you take away gets a new key that they
+                  cannot open.
+                </p>
               ) : (
                 <div className="space-y-2">
                   <p>
-                    Every environment gets a new key that only the remaining members can open.
-                    Service tokens {who} made are revoked.
+                    Every environment they could read gets a new key that only the remaining members
+                    can open. Service tokens {who} made are revoked.
                   </p>
                   <p>
                     They may still have copies of old values, so change the real credentials
@@ -318,15 +388,28 @@ function MemberRow({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {(confirm === "grant" && canLimit) || confirm === "access" ? (
+            <AccessPicker stages={stages} value={access} onChange={setAccess} disabled={busy} />
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <Button
               variant={confirm === "remove" ? "destructive" : "default"}
               disabled={busy}
-              onClick={() => void (confirm === "grant" ? grant() : remove())}
+              onClick={() =>
+                void (confirm === "grant"
+                  ? grant()
+                  : confirm === "access"
+                    ? saveAccess()
+                    : remove())
+              }
             >
               {busy ? <Spinner /> : null}
-              {confirm === "grant" ? "It matches, give access" : "Remove and change keys"}
+              {confirm === "grant"
+                ? "It matches, give access"
+                : confirm === "access"
+                  ? "Save access"
+                  : "Remove and change keys"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

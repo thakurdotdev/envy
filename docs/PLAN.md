@@ -16,7 +16,7 @@
 | Phase 7 — CI tokens and polish                 | Done                                                  |
 | Phase 8 — Hardening and release                | Code done; deploy and first release pending           |
 | Phase 9 — Monorepo apps                        | Done                                                  |
-| Phase 10 — Project lifecycle and access        | In progress                                           |
+| Phase 10 — Project lifecycle and access        | Done                                                  |
 
 Decisions that changed this plan are recorded in [docs/adr/](adr/).
 
@@ -653,7 +653,22 @@ Goal: owners can delete projects, admins can limit a member to some environments
 
 - [x] Delete and restore projects: owner only, restorable for 30 days, purged daily by the API; `envy projects ls|rm|restore`; dashboard project Settings (rename, delete) and Recently deleted
 - [x] Shared layer, explained: "Shared (all)" tab, a line saying what it does, inherited values shown in each environment
-- [ ] Access per environment (ADR 0019): a member gets every stage or only some; keys only for those; server refuses the rest; CLI and dashboard to change it
+- [x] Access per environment (ADR 0019): a member gets every stage or only some; keys only for those; server refuses the rest; CLI and dashboard to change it
+
+#### Phase 10 summary (2026-11-26)
+
+Built:
+
+- Project deletion: owner only, from `envy projects rm` or the dashboard's new project Settings page (which also renames). Restorable for 30 days (`envy projects restore`, Recently deleted on the projects page); the API purges older ones once a day.
+- The shared layer explains itself: "Shared (all)" tab with a line saying what it does, and an Inherited list under every environment showing values from the layers below, marking those it overrides.
+- Access per environment (ADR 0019): members and viewers can be limited to some stages. Keys follow access everywhere (grant, new stage, new app, removal), changing access wraps or rotates in one request, and the server leaves out and refuses what a member cannot read. CLI `envy members grant --access`, `envy members access`; dashboard Access column, picker in the grant dialog and a Change dialog.
+
+Not done:
+
+- Limiting admins (they manage every key by design).
+- Access per app (a member who sees only one app of a monorepo).
+
+Open question: none.
 
 ## Testing, CI and release
 

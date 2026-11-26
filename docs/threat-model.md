@@ -128,7 +128,11 @@ most sensitive work, and host the dashboard separately from the API.
   when accepting (worked out from their own key, never from the server's
   answer). Comparing the two in person or on a call defeats a server
   that swaps public keys.
-- **Removing** an active member rotates every environment key in the same
+- **Access per environment** (ADR 0019): a member or viewer can be limited to
+  some stages. They are only ever given the keys of those environments, so a
+  server cannot serve them anything else in readable form; the server also
+  refuses the rest. Taking a stage away rotates its key, as a removal does.
+- **Removing** an active member rotates every environment key they could read in the same
   transaction: new keys go only to remaining members and active service
   tokens, and the latest secrets are re-encrypted. Service tokens the member
   made are revoked (they saw the full token once) and their unused invites
