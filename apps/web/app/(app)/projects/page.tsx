@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ChevronRight, FolderLock, Plus } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, SectionHeader } from "@/components/page-header";
 import { InlineCode } from "@/components/inline-code";
 import { LoadError, LoadingRows } from "@/components/states";
 import { RoleBadge, StatusBadge } from "@/components/status-badge";
@@ -24,7 +24,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { forgetCached, useLoad } from "@/hooks/use-load";
 import { call, errorMessage } from "@/lib/api";
-import { createProject } from "@/lib/envy";
+import { createProject, formatDate } from "@/lib/envy";
 import { useUnlocked } from "@/lib/session";
 
 export default function ProjectsPage() {
@@ -102,8 +102,68 @@ export default function ProjectsPage() {
           ))}
         </ul>
       ) : null}
+      <RecentlyDeleted onRestored={reload} />
       <NewProjectDialog open={creating} onOpenChange={setCreating} />
     </>
+  );
+}
+
+/** Projects the user deleted in the last 30 days. Hidden when there are none. */
+function RecentlyDeleted({ onRestored }: { onRestored: () => void }) {
+  const { state, reload } = useLoad(() => call((api) => api.v1.projects.deleted.get()), [], {
+    cacheKey: "projects:deleted",
+  });
+  const [restoring, setRestoring] = useState<string | undefined>();
+  if (state.status !== "ready" || state.data.items.length === 0) {
+    return null;
+  }
+
+  async function restore(project: { id: string; name: string }) {
+    setRestoring(project.id);
+    try {
+      await call((api) => api.v1.projects({ id: project.id }).restore.post());
+      forgetCached("projects");
+      toast.success(`Restored ${project.name}`);
+      reload();
+      onRestored();
+    } catch (caught) {
+      toast.error(errorMessage(caught));
+    } finally {
+      setRestoring(undefined);
+    }
+  }
+
+  return (
+    <section aria-labelledby="deleted-heading" className="mt-12">
+      <SectionHeader
+        id="deleted-heading"
+        title="Recently deleted"
+        description="Nobody can read these. Restore one within 30 days, or it is removed for good."
+      />
+      <ul className="divide-y rounded-lg border bg-card">
+        {state.data.items.map((project) => (
+          <li key={project.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{project.name}</span>
+              <span className="block text-xs text-muted-foreground">
+                {project.purgeAfter === null
+                  ? ""
+                  : `Removed for good on ${formatDate(project.purgeAfter)}`}
+              </span>
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={restoring !== undefined}
+              onClick={() => void restore(project)}
+            >
+              {restoring === project.id ? <Spinner /> : null}
+              Restore
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

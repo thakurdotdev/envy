@@ -328,7 +328,7 @@ describe("deleting a project", () => {
     const path = `/v1/projects/${doomed.projectId}`;
 
     const deleted = await testApp.request("DELETE", path, { accessToken: owner.accessToken });
-    expect(deleted.status).toBe(204);
+    expect(deleted.status).toBe(200);
 
     const afterwards = await testApp.request("GET", path, { accessToken: owner.accessToken });
     expect(afterwards.status).toBe(404);

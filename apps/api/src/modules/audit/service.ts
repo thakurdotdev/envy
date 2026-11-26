@@ -10,6 +10,7 @@ export type AuditEvent = {
     | "project.created"
     | "project.renamed"
     | "project.deleted"
+    | "project.restored"
     | "app.created"
     | "app.removed"
     | "environment.created"

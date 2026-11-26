@@ -15,6 +15,7 @@ import { RoleBadge } from "./status-badge";
 export type ProjectInfo = {
   id: string;
   name: string;
+  slug: string;
   /** owner, admin, member or viewer. */
   role: string;
 };
@@ -38,7 +39,8 @@ export function ProjectFrame({
 }: {
   /** The page's own name, for the tab title ("Members"). */
   section: string;
-  children: (project: ProjectInfo) => ReactNode;
+  /** `reloadProject` loads the project again, after a rename for example. */
+  children: (project: ProjectInfo, reloadProject: () => void) => ReactNode;
 }) {
   const projectId = useProjectId();
   const { state, reload } = useLoad(
@@ -81,7 +83,7 @@ export function ProjectFrame({
             <RoleBadge role={project.role} title="Your role in this project" />
           </div>
           <ProjectNav project={project} />
-          {children(project)}
+          {children(project, reload)}
         </>
       )}
     </>
@@ -96,6 +98,7 @@ function ProjectNav({ project }: { project: ProjectInfo }) {
     { href: "/members", label: "Members", show: true },
     { href: "/tokens", label: "Service tokens", show: isAdmin },
     { href: "/audit", label: "Audit log", show: isAdmin },
+    { href: "/project-settings", label: "Settings", show: isAdmin },
   ].filter((link) => link.show);
 
   return (

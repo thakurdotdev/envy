@@ -313,6 +313,29 @@ describe("monorepo apps (ADR 0018)", () => {
   }, 120_000);
 });
 
+describe("project settings", () => {
+  test("the owner deletes a project after typing its slug, then restores it", async () => {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${webServer.port}/projects`);
+    await page.getByRole("link", { name: "Sign in with GitHub" }).click();
+    await unlock(page);
+    await page.getByRole("link", { name: /Mono Web/ }).click();
+    const projectNav = page.getByRole("navigation", { name: "Project" });
+    await projectNav.getByRole("link", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Delete project" }).click();
+    const confirm = page.getByRole("alertdialog").getByRole("button", { name: "Delete project" });
+    expect(await confirm.isDisabled()).toBe(true);
+    await page.getByLabel("Project slug").fill("mono-web");
+    await confirm.click();
+
+    await page.getByRole("heading", { name: "Recently deleted" }).waitFor();
+    expect(await page.getByRole("link", { name: /Mono Web/ }).count()).toBe(0);
+    await page.getByRole("button", { name: "Restore" }).click();
+    await page.getByRole("link", { name: /Mono Web/ }).waitFor();
+    await page.close();
+  }, 120_000);
+});
+
 // Playwright's own `expect` is not used, so this small bridge waits for
 // visibility and values with bun:test assertions.
 function expectLocator(locator: ReturnType<Page["getByTestId"]>) {

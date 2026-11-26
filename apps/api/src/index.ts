@@ -4,6 +4,8 @@ import { createDatabase } from "./db/client.ts";
 import { systemClock } from "./lib/clock.ts";
 import { createLogger } from "./lib/logger.ts";
 import { createGitHubClient } from "./modules/auth/github.ts";
+import { schedulePurge } from "./modules/projects/purge.ts";
+import { createRunInTransaction } from "./repositories.ts";
 
 const MAX_REQUEST_BODY_BYTES = 256 * 1024;
 
@@ -36,9 +38,15 @@ const app = createApp({ config, database, clock: systemClock, logger, github }).
   maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
 });
 logger.info("API started", { port: config.port, environment: config.environment });
+const stopPurge = schedulePurge({
+  runInTransaction: createRunInTransaction(database),
+  clock: systemClock,
+  logger,
+});
 
 async function shutDown(signal: string): Promise<void> {
   logger.info("API stopping", { signal });
+  stopPurge();
   await app.stop();
   await close();
   process.exit(0);
