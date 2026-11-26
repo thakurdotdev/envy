@@ -15,6 +15,7 @@ import { getVariable, setVariables, unsetVariables } from "./commands/variables.
 import { acceptInvite } from "./commands/accept.ts";
 import { history, rollback } from "./commands/history.ts";
 import {
+  changeAccess,
   changeRole,
   grantPending,
   inviteMember,
@@ -179,8 +180,15 @@ members
   .command("grant")
   .description("give waiting members the keys (after checking their fingerprint)")
   .argument("[member]", "GitHub login or email; leave out for everyone waiting")
+  .option("--access <stages>", "only these stages, such as development,staging (default: all)")
   .option(...yesOption)
   .action(grantPending);
+members
+  .command("access")
+  .description("choose which environments a member can read")
+  .argument("<member>")
+  .argument("<stages>", "all, or stages such as development,staging (shared is always included)")
+  .action(changeAccess);
 members
   .command("rm")
   .description("remove a member and change every environment key")

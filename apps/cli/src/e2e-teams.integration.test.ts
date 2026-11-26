@@ -67,7 +67,7 @@ describe("envy teams, end to end", () => {
     expect((await asOwner(["get", "TOKEN"])).stdout).toBe("one\n");
 
     const removed = await asOwner(["members", "rm", "bob", "--yes"]);
-    expect(removed.stderr).toContain("changed every environment key");
+    expect(removed.stderr).toContain("changed the key of every environment they could read");
     expect(removed.stderr).toContain("Change the real credentials");
 
     const bobAfter = await asBob(["pull"]);

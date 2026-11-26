@@ -1,14 +1,7 @@
-import {
-  clearKey,
-  encryptSecrets,
-  fingerprint,
-  fromBase64Url,
-  generateEnvKey,
-  toBase64Url,
-} from "@envy/crypto";
+import { clearKey, fingerprint, fromBase64Url } from "@envy/crypto";
 import { fetchEnvKey, wrapEnvKeyFor } from "./env-keys.ts";
 import { CliError } from "./errors.ts";
-import { listEnvironments, pullEnvironment } from "./secrets.ts";
+import { listEnvironments } from "./secrets.ts";
 import type { Session } from "./session.ts";
 import {
   checkListedPublicKeys,
@@ -17,21 +10,13 @@ import {
   type KeyOwner,
 } from "./trust.ts";
 import type { UnlockedKeys } from "./unlock.ts";
+import { memberCanRead } from "@envy/shared";
+import { buildRotation, type Rotation } from "./rotation.ts";
 
 // Team changes that need cryptography on the admin's machine: giving a new
 // member the environment keys, and rotating every key when someone leaves.
 
 type WrappedKeyForEnvironment = { environmentId: string; keyVersion: number; wrappedKey: string };
-type WrappedKeyForUser = { userId: string; wrappedKey: string };
-type Rotation = {
-  environmentId: string;
-  newKeyVersion: number;
-  wrappedKeys: WrappedKeyForUser[];
-  tokenWrappedKeys: Array<{ tokenId: string; wrappedKey: string }>;
-  baseVersion: number;
-  ciphertext?: string;
-  nonce?: string;
-};
 
 export type Member = {
   id: string;
@@ -41,6 +26,8 @@ export type Member = {
   role: string;
   status: "pending" | "active";
   publicKey: string | null;
+  /** Null: every environment. Otherwise the stages they can read (ADR 0019). */
+  access: string[] | null;
 };
 
 /** The project's members. Refuses if anyone's public key changed since this machine last saw it. */
@@ -83,12 +70,17 @@ export async function fingerprintOf(publicKey: string | null): Promise<string> {
   return publicKey === null ? "(no key yet)" : fingerprint(await fromBase64Url(publicKey));
 }
 
-/** Wraps every environment key for a pending member and activates them. */
+/**
+ * Wraps the key of every environment the member may read for a pending
+ * member and activates them. `access` (ADR 0019) sets which stages; left
+ * out, the access they already have stays.
+ */
 export async function grantMember(
   session: Session,
   keys: UnlockedKeys,
   projectId: string,
   member: Member,
+  access?: string[] | null,
 ) {
   if (member.publicKey === null) {
     throw new CliError(`@${member.githubLogin} has not set up their keys yet.`, {
@@ -99,7 +91,10 @@ export async function grantMember(
   await pinConfirmedPublicKeys(projectId, keyOwnerOf(member));
   const memberPublicKey = await fromBase64Url(member.publicKey);
   const wrappedKeys: WrappedKeyForEnvironment[] = [];
-  for (const environment of await listEnvironments(session, projectId)) {
+  const readable = (await listEnvironments(session, projectId)).filter((environment) =>
+    memberCanRead({ access: access === undefined ? member.access : access }, environment),
+  );
+  for (const environment of readable) {
     const keyVersion = environment.currentKeyVersion;
     const envKey = await fetchEnvKey({ session, keys, projectId, environment, keyVersion });
     wrappedKeys.push({
@@ -112,7 +107,11 @@ export async function grantMember(
     });
     await clearKey(envKey);
   }
-  await session.call((api) => api.v1.members({ id: member.id }).grant.post({ wrappedKeys }));
+  await session.call((api) =>
+    api.v1
+      .members({ id: member.id })
+      .grant.post({ wrappedKeys, ...(access === undefined ? {} : { access }) }),
+  );
 }
 
 /**
@@ -141,62 +140,14 @@ export async function removeMember(
     keys,
   );
   const rotations: Rotation[] = [];
+  // Only the environments they could read need a new key (ADR 0019).
   for (const environment of await listEnvironments(session, projectId)) {
-    const newKeyVersion = environment.currentKeyVersion + 1;
-    const newEnvKey = await generateEnvKey();
-    const wrappedKeys: WrappedKeyForUser[] = [];
-    for (const recipient of staying) {
-      if (recipient.publicKey === null) {
-        continue;
-      }
-      wrappedKeys.push({
-        userId: recipient.userId,
-        wrappedKey: await wrapEnvKeyFor(newEnvKey, keys, recipient.publicKey, {
-          environmentId: environment.id,
-          keyVersion: newKeyVersion,
-        }),
-      });
+    if (memberCanRead(member, environment)) {
+      const readers = staying.filter((candidate) => memberCanRead(candidate, environment));
+      rotations.push(
+        await buildRotation({ session, keys, projectId, environment, readers, activeTokens }),
+      );
     }
-    // Service tokens that read this environment (as theirs or as a layer
-    // under it, ADR 0018) get the new key too, so CI keeps working.
-    const tokenWrappedKeys: Rotation["tokenWrappedKeys"] = [];
-    for (const token of activeTokens.filter(
-      (candidate) =>
-        candidate.environmentId === environment.id ||
-        candidate.layerEnvironmentIds.includes(environment.id),
-    )) {
-      tokenWrappedKeys.push({
-        tokenId: token.id,
-        wrappedKey: await wrapEnvKeyFor(newEnvKey, keys, token.publicKey, {
-          environmentId: environment.id,
-          keyVersion: newKeyVersion,
-        }),
-      });
-    }
-    const latest = await pullEnvironment(session, keys, projectId, environment);
-    const rotation: Rotation = {
-      environmentId: environment.id,
-      newKeyVersion,
-      wrappedKeys,
-      tokenWrappedKeys,
-      baseVersion: latest.version,
-    };
-    if (latest.version === 0) {
-      rotations.push(rotation);
-    } else {
-      const encrypted = await encryptSecrets(latest.secrets, newEnvKey, {
-        projectId,
-        environmentId: environment.id,
-        version: latest.version + 1,
-        keyVersion: newKeyVersion,
-      });
-      rotations.push({
-        ...rotation,
-        ciphertext: await toBase64Url(encrypted.ciphertext),
-        nonce: await toBase64Url(encrypted.nonce),
-      });
-    }
-    await clearKey(newEnvKey);
   }
   // The answer lists the service tokens this member made, which were revoked with them.
   return session.call((api) => api.v1.members({ id: member.id }).delete({ rotations }));

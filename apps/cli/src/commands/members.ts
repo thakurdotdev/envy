@@ -9,6 +9,7 @@ import {
   removeMember,
   type Member,
 } from "../core/team.ts";
+import { changeMemberAccess, describeAccess, parseAccess } from "../core/access.ts";
 import { getUnlockedKeys } from "../core/unlock.ts";
 import { output } from "../ui/output.ts";
 import { askConfirm } from "../ui/prompts.ts";
@@ -47,8 +48,9 @@ export async function listTeam(options: { json?: boolean }): Promise<void> {
   }
   for (const member of members) {
     const status = member.status === "pending" ? "  (waiting for keys)" : "";
+    const access = member.access === null ? "all" : member.access.join(",");
     output.result(
-      `@${member.githubLogin.padEnd(20)} ${member.role.padEnd(7)} ${await fingerprintOf(member.publicKey)}${status}`,
+      `@${member.githubLogin.padEnd(20)} ${member.role.padEnd(7)} ${access.padEnd(20)} ${await fingerprintOf(member.publicKey)}${status}`,
     );
   }
   output.info(
@@ -71,9 +73,37 @@ export async function inviteMember(email: string, options: { role?: string }): P
   );
 }
 
-export async function grantPending(who: string | undefined, options: YesOption): Promise<void> {
+export async function grantPending(
+  who: string | undefined,
+  options: YesOption & { access?: string },
+): Promise<void> {
   const { projectId, session } = await openTeam();
-  await grantPendingInProject(session, projectId, who, options.yes === true);
+  const access = options.access === undefined ? undefined : parseAccess(options.access);
+  await grantPendingInProject(session, projectId, who, options.yes === true, access);
+}
+
+/** Changes which environments a member can read (ADR 0019). */
+export async function changeAccess(who: string, stages: string): Promise<void> {
+  const { projectId, session } = await openTeam();
+  const member = findMember(await listMembers(session, projectId), who);
+  const access = parseAccess(stages);
+  const { gained, lost } = await changeMemberAccess(
+    session,
+    await getUnlockedKeys(session),
+    projectId,
+    member,
+    access,
+  );
+  output.success(`@${member.githubLogin} can now read ${describeAccess(access)}.`);
+  if (lost > 0) {
+    output.info(
+      `Changed the key of ${lost} ${lost === 1 ? "environment" : "environments"} they lost. They may still have copies of old values: change real credentials if that matters.`,
+    );
+  } else if (gained > 0) {
+    output.info(
+      `Gave them the keys of ${gained} more ${gained === 1 ? "environment" : "environments"}.`,
+    );
+  }
 }
 
 /** Grants access to one or all pending members of a project, checking fingerprints first. */
@@ -82,6 +112,7 @@ export async function grantPendingInProject(
   projectId: string,
   who: string | undefined,
   alreadyConfirmed: boolean,
+  access?: string[] | null,
 ): Promise<void> {
   const pending = (await listMembers(session, projectId)).filter(
     (member) => member.status === "pending",
@@ -97,8 +128,9 @@ export async function grantPendingInProject(
       output.warn(`Skipped @${member.githubLogin}.`);
       continue;
     }
-    await grantMember(session, keys, projectId, member);
-    output.success(`@${member.githubLogin} can now pull every environment.`);
+    await grantMember(session, keys, projectId, member, access);
+    const given = access === undefined ? member.access : access;
+    output.success(`@${member.githubLogin} can now pull ${describeAccess(given)}.`);
   }
 }
 
@@ -122,7 +154,7 @@ export async function removeFromTeam(who: string, options: YesOption): Promise<v
   const member = findMember(await listMembers(session, projectId), who);
   if (options.yes !== true) {
     const confirmed = await askConfirm(
-      `Remove @${member.githubLogin}? Every environment gets a new key.`,
+      `Remove @${member.githubLogin}? Every environment they could read gets a new key.`,
       "Add --yes to remove them.",
     );
     if (!confirmed) {
@@ -135,7 +167,9 @@ export async function removeFromTeam(who: string, options: YesOption): Promise<v
     projectId,
     member,
   );
-  output.success(`Removed @${member.githubLogin} and changed every environment key.`);
+  output.success(
+    `Removed @${member.githubLogin} and changed the key of every environment they could read.`,
+  );
   if (revokedTokens.length > 0) {
     const names = revokedTokens
       .map((token) => `"${token.name}" (${token.environmentName})`)

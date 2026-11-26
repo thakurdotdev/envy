@@ -1,4 +1,5 @@
 import { newEnvironmentKey, trustedActiveMembers, type NewEnvironmentKey } from "../core/apps.ts";
+import { memberCanRead } from "@envy/shared";
 import { requireProjectLink } from "../core/project-link.ts";
 import { listApps, listEnvironments } from "../core/secrets.ts";
 import { openSession } from "../core/session.ts";
@@ -40,7 +41,10 @@ export async function addEnvironment(
   const projectId = found.link.projectId;
   const session = await openSession();
   const keys = await getUnlockedKeys(session);
-  const members = await trustedActiveMembers(session, keys, projectId);
+  // A member limited to some stages does not get this new one (ADR 0019).
+  const members = (await trustedActiveMembers(session, keys, projectId)).filter((member) =>
+    memberCanRead(member, { name, isShared: false }),
+  );
   const root = await newEnvironmentKey(keys, members);
   const appEnvironments: Array<NewEnvironmentKey & { appId: string }> = [];
   for (const app of await listApps(session, projectId)) {
